@@ -2,10 +2,12 @@
 import { nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import DirectoryTreeNode from "./DirectoryTreeNode.vue";
 import FileIcon from "./FileIcon.vue";
+import FilePreviewDialog from "./FilePreviewDialog.vue";
 const { workspace: w } = defineProps({ workspace: { type: Object, required: true } });
 const { state, subscribed, visibleEntries } = w;
 const menu = shallowRef(null);
 const menuElement = ref(null);
+const previewDialog = ref(null);
 function closeMenu(restoreFocus = false) {
   const trigger = menu.value?.trigger;
   menu.value = null;
@@ -31,6 +33,11 @@ function runMenuAction(action) {
   const target = menu.value;
   closeMenu(true);
   if (target && subscribed.value && !state.busy) w.run(() => action(target.entry));
+}
+function previewFile() {
+  const target = menu.value;
+  closeMenu(true);
+  if (target?.entry.kind === "file" && subscribed.value && !state.busy) previewDialog.value.open(target.entry.path);
 }
 function openSearchMenu(entry, event) {
   if (event.type === "contextmenu" || event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
@@ -112,6 +119,10 @@ onUnmounted(() => {
         <button id="new-file" role="menuitem" :disabled="!subscribed || state.busy" @click="runMenuAction(entry => w.createEntry('file', entry.path))"><FileIcon kind="file" />新建文件</button>
         <button id="new-folder" role="menuitem" :disabled="!subscribed || state.busy" @click="runMenuAction(entry => w.createEntry('directory', entry.path))"><FileIcon kind="directory" />新建目录</button>
       </template>
+      <button v-if="menu.entry.kind === 'file'" id="preview-file" role="menuitem" aria-haspopup="dialog"
+        :disabled="!subscribed || state.busy" @click="previewFile">
+        <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg>查看内容
+      </button>
       <template v-if="menu.entry.path">
         <button id="rename-entry" role="menuitem" :disabled="!subscribed || state.busy" @click="runMenuAction(w.renameEntry)">
           <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 4 5 5M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14v6ZM13 20h8" /></svg>重命名
@@ -122,4 +133,5 @@ onUnmounted(() => {
       </template>
     </div>
   </Teleport>
+  <FilePreviewDialog ref="previewDialog" :workspace="w" />
 </template>

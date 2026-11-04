@@ -69,6 +69,16 @@ test("Vue 工作区与真实后端联调：配对、编辑、版本冲突、搜�
     state.draft = "changed\n";
     assert.equal(workspace.dirty.value, true);
     assert.equal(workspace.canSave.value, true);
+    const loadedBeforePreview = state.loaded;
+    const selectedBeforePreview = state.selected;
+    const previewCalls = calls.length;
+    const preview = await workspace.readPreviewFile("hidden.log");
+    assert.equal(preview.content, "log");
+    assert.deepEqual(calls.slice(previewCalls), ["file/read"], "预览只能读取，不能触发写入");
+    assert.equal(state.loaded, loadedBeforePreview, "预览不能切换主编辑器文件");
+    assert.equal(state.selected, selectedBeforePreview);
+    assert.equal(state.draft, "changed\n", "预览须保留未同步草稿");
+    assert.equal(await readFile(path.join(root, "hello.txt"), "utf8"), "\ufeffhello\r\n");
     await workspace.saveFile();
     assert.equal(await readFile(path.join(root, "hello.txt"), "utf8"), "\ufeffchanged\r\n");
     assert.equal(workspace.dirty.value, false);

@@ -92,8 +92,9 @@ summary { cursor: pointer; padding: 12px 0 0; }
 .directory-tree, .tree-children { list-style: none; margin: 0; padding: 0; }
 .tree-children { margin-left: 14px; padding-left: 7px; border-left: 1px solid var(--line); }
 .tree-node > .entry { gap: 5px; padding: 5px 4px; }
-.entry-context-menu { position: fixed; z-index: 100; min-width: 160px; padding: 5px; border: 1px solid var(--line); border-radius: 7px; background: #fff; box-shadow: 0 8px 24px #183b2526; }
-.entry-context-menu button { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 12px; border: 0; background: transparent; text-align: left; }
+.entry-context-menu { position: fixed; z-index: 100; min-width: 136px; padding: 4px; border: 1px solid var(--line); border-radius: 7px; background: #fff; box-shadow: 0 8px 24px #183b2526; }
+.entry-context-menu button { display: flex; align-items: center; gap: 7px; width: 100%; padding: 6px 9px; border: 0; background: transparent; text-align: left; font-size: 11px; line-height: 16px; }
+.entry-context-menu .file-icon { width: 14px; height: 14px; }
 .entry-context-menu button:hover, .entry-context-menu button:focus-visible { background: #e3efe6; }
 .tree-chevron { width: 12px; height: 12px; flex-shrink: 0; color: #829487; }
 .tree-chevron.expanded { transform: rotate(90deg); }
@@ -115,7 +116,11 @@ summary { cursor: pointer; padding: 12px 0 0; }
 .code-editor { width: 100%; height: 0; flex: 1; min-height: 0; overflow: hidden; background: #fff; }
 .code-editor .cm-editor { width: 100%; max-width: 100%; height: 100%; overflow: hidden; border-right: 1px solid #d4dfd7; font-size: 12px; }
 .code-editor .cm-editor.cm-focused { outline: none; }
-.code-editor .cm-scroller { width: 100%; min-width: 0; overflow: auto; font-family: Consolas, "Microsoft YaHei", monospace; line-height: 1.75; }
+.code-editor .cm-scroller { width: 100%; min-width: 0; min-height: 0; overflow: auto; scrollbar-width: auto; font-family: Consolas, "Microsoft YaHei", monospace; line-height: 1.75; }
+.code-editor .cm-scroller::-webkit-scrollbar { display: block; width: 10px; height: 10px; }
+.code-editor .cm-scroller::-webkit-scrollbar-track, .code-editor .cm-scroller::-webkit-scrollbar-corner { background: #f3f6f4; }
+.code-editor .cm-scroller::-webkit-scrollbar-thumb { background: #b5c4bb; border: 2px solid #f3f6f4; border-radius: 5px; }
+.code-editor .cm-scroller::-webkit-scrollbar-thumb:hover { background: #829b8d; }
 .code-editor .cm-content { padding: 12px 0; }
 .code-editor .cm-line { padding: 0 12px; }
 .code-editor .cm-gutters { background: #fafcfb; color: #97a69b; border-right: 1px solid var(--line); }
@@ -146,6 +151,15 @@ summary { cursor: pointer; padding: 12px 0 0; }
 .dialog-close { position: absolute; top: 8px; right: 10px; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; font-size: 22px; line-height: 1; }
 .workspace-dialog .card { border: 0; border-radius: 0; box-shadow: none; }
 .dialog-notice { margin: 0 22px 20px; max-height: none; }
+.file-preview-dialog { width: 80vw; height: 80dvh; max-height: 80dvh; overflow: hidden; }
+.file-preview-dialog[open] { display: flex; flex-direction: column; }
+.file-preview-header { flex: none; display: flex; align-items: center; gap: 8px; max-height: 25%; padding: 12px 16px; border-bottom: 1px solid var(--line); overflow: auto; }
+.file-preview-heading { flex: 1; min-width: 0; }
+.file-preview-heading h2 { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.file-preview-heading p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+.file-preview-close { flex: none; width: 28px; height: 28px; padding: 0; font-size: 20px; line-height: 1; }
+.file-preview-body { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.file-preview-message { margin: 16px; font-size: 12px; overflow: auto; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 [hidden] { display: none !important; }
 @media (max-width: 1350px) { .page-header { grid-template-columns: minmax(0,1fr) auto; gap: 10px 16px; } #folder-controls { grid-column: 1 / -1; grid-row: 2; } }

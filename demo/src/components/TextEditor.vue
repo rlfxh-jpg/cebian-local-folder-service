@@ -15,7 +15,7 @@ const { state, subscribed, syncStatus, fileMeta } = w;
         <button id="refresh" :disabled="!subscribed || state.busy" @click="w.run(w.refreshTree)">刷新</button>
       </div>
     </div>
-    <CodeEditor :model-value="state.draft" :path="state.loaded?.path || ''"
+    <CodeEditor id="editor" :model-value="state.draft" :path="state.loaded?.path || ''"
       :document-key="`${state.subscription?.subscriptionId || ''}:${state.loaded?.path || ''}`"
       :read-only="!subscribed || !state.loaded?.editable || state.busy"
       @update:model-value="w.updateDraft" @composition="w.setComposing" />

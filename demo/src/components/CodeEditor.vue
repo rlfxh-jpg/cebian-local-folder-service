@@ -24,5 +24,5 @@ onBeforeUnmount(() => { editor?.destroy(); });
 </script>
 
 <template>
-  <div id="editor" ref="host" class="code-editor"></div>
+  <div ref="host" class="code-editor"></div>
 </template>

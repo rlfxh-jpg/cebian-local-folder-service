@@ -196,6 +196,13 @@ export function useFolderWorkspace(client = new FolderClient()) {
     if (!state.searching) syncCurrentDirectory();
     notice(state.loaded.editable ? `已打开 ${path}，网页与本地内容自动同步。` : "文件以只读方式展示，本地变化会自动同步。");
   }
+  async function readPreviewFile(path) {
+    const subscription = state.subscription;
+    if (disposed || !subscribed.value) throw new Error("请先连接服务并授权目录。");
+    const file = await client.request("file/read", { path });
+    if (disposed || !subscribed.value || state.subscription !== subscription) throw new Error("目录授权已变化，请重新打开文件预览。");
+    return file;
+  }
   const normalized = (file) => file.content.replace(/\r\n?/g, "\n");
   function applyFile(file) {
     clearTimeout(saveTimer);
@@ -439,7 +446,7 @@ export function useFolderWorkspace(client = new FolderClient()) {
     state, authorized, subscribed, dirty, canSave, syncStatus, visibleEntries, entriesFor, status, fileMeta, run,
     connect, disconnect: () => client.disconnect(), pair, serviceStatus, chooseRoot, closeRoot,
     showRecents, removeRecent, listDirectory, selectEntry, search, createEntry, renameEntry, deleteEntry,
-    saveFile, updateDraft, setComposing, resolveConflict, retrySync, saveRules,
+    saveFile, updateDraft, setComposing, resolveConflict, retrySync, saveRules, readPreviewFile,
     refreshTree, returnToTree, loadMore: (path) => fetchDirectory(path, true),
   };
 }
