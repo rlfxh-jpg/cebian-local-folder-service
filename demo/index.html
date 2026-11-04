@@ -1,60 +1,13 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Cebian · 本地文件工作台 Demo</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/styles.css">
-  <script type="module" src="/app.js"></script>
-</head>
-<body>
-  <header class="page-header">
-    <div class="brand"><span class="brand-mark" aria-hidden="true">C</span><div><h1>本地文件工作台 <span class="tag">DEMO</span></h1><p>Cebian Local Folder Service · 协议 1.0</p></div></div>
-    <span id="connection-state" class="status">未连接</span>
-  </header>
-  <main>
-    <section class="card connection" aria-labelledby="connection-title">
-      <div class="section-heading"><h2 id="connection-title">01 <span>连接与配对</span></h2><p>启动服务 → 输入终端配对码 → 授权一个目录</p></div>
-      <div class="connection-fields">
-        <label class="endpoint">WebSocket 地址<input id="endpoint" type="url" value="ws://127.0.0.1:8765/ws" spellcheck="false"></label>
-        <button id="connect" class="primary">连接服务</button><button id="disconnect" disabled>断开</button>
-        <label>一次性配对码<input id="pair-code" placeholder="从启动终端复制" autocomplete="off" spellcheck="false" maxlength="10" disabled></label>
-        <button id="pair" disabled>配对</button>
-        <button id="service-status" disabled>服务状态</button>
-      </div>
-      <p class="hint">凭据仅保存在当前页面内存；断线后可重新认证。刷新页面后需重启服务获取新配对码。</p>
-    </section>
-    <div id="notice" class="notice" role="status" aria-live="polite">准备就绪。连接本机服务后开始使用。</div>
-    <section class="card workspace" aria-labelledby="workspace-title">
-      <div class="section-heading"><h2 id="workspace-title">02 <span>文件工作区</span></h2><span id="root-label" class="muted">尚未授权目录</span></div>
-      <fieldset id="folder-controls" disabled>
-        <legend class="sr-only">目录授权</legend>
-        <div class="folder-fields"><label class="sr-only" for="root-path">要授权的绝对目录路径</label><input id="root-path" placeholder="输入本机绝对目录路径，例如 D:\Projects\example" spellcheck="false"><button id="open-root" class="primary">授权并打开</button><button id="choose-root">系统选择器</button><button id="close-root" disabled>关闭目录</button></div>
-        <details id="recents"><summary>最近使用的目录</summary><div id="recent-list" class="recent-list">暂无记录</div></details>
-      </fieldset>
-      <div class="workbench">
-        <section class="explorer" aria-label="目录浏览与搜索">
-          <fieldset id="browse-controls" disabled>
-            <legend class="sr-only">文件操作</legend>
-            <div class="toolbar"><button id="up" title="上一级目录">↑ 上级</button><button id="refresh">刷新</button><button id="new-file">＋ 文件</button><button id="new-folder">＋ 目录</button></div>
-            <form id="search-form" class="search"><label class="sr-only" for="search-query">按文件名搜索</label><input id="search-query" placeholder="搜索文件名…" maxlength="256"><button type="submit">搜索</button><button type="button" id="clear-search" hidden>返回</button></form>
-            <label class="toggle"><input id="show-hidden" type="checkbox"> 显示被隐藏规则标记的项目</label>
-          </fieldset>
-          <div id="breadcrumb" class="breadcrumb">/</div>
-          <div id="entries" class="entries"><p class="empty">授权目录后，文件会显示在这里。</p></div>
-          <div class="list-footer"><span id="list-info">0 个项目</span><button id="load-more" hidden>加载更多</button></div>
-        </section>
-        <section class="editor-panel" aria-label="文本编辑器">
-          <div class="editor-header"><div><strong id="file-name">选择一个文本文件</strong><p id="file-meta">支持 UTF-8 · 显式保存 · 版本冲突保护</p></div><div class="editor-actions"><button id="reload-file" disabled>重新读取</button><button id="rename" disabled>重命名</button><button id="delete" class="danger" disabled>删除</button><button id="save" class="primary" disabled>保存</button></div></div>
-          <label class="sr-only" for="editor">文本文件内容</label><textarea id="editor" spellcheck="false" readonly placeholder="从左侧打开文件，开始查看或编辑。"></textarea>
-          <div class="editor-footer"><span id="edit-state">尚未打开文件</span><span>Ctrl / ⌘ + S 保存</span></div>
-        </section>
-      </div>
-      <details class="rules"><summary>隐藏与停止监听规则</summary><fieldset id="rule-controls" disabled><legend class="sr-only">忽略规则</legend><div class="rule-grid"><label>隐藏规则（每行一个 glob，仅影响展示）<textarea id="hidden-rules" rows="3" spellcheck="false" placeholder="*.log"></textarea></label><label>停止监听规则（不进入遍历、搜索及事件）<textarea id="stopped-rules" rows="3" spellcheck="false" placeholder="node_modules&#10;.git"></textarea></label></div><button id="save-rules">应用规则</button><span id="rule-version" class="hint"></span></fieldset></details>
-    </section>
-    <section class="card events" aria-labelledby="events-title"><div class="section-heading"><h2 id="events-title">03 <span>请求与实时事件</span></h2><button id="clear-log">清空记录</button></div><p class="hint">显示方法、耗时和变更通知，便于调试。最多保留 80 条记录。</p><ol id="event-log" aria-live="polite"><li class="muted">等待连接…</li></ol></section>
-  </main>
-  <footer class="page-footer">本机文件系统是事实来源 · 所有操作均受目录授权约束</footer>
-</body>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cebian · 本地文件工作台 Demo</title>
+    <link rel="icon" href="data:,">
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
 </html>

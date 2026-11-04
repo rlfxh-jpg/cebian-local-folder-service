@@ -72,6 +72,7 @@ summary { cursor: pointer; padding: 12px 0 0; }
 .editor-header p { font-size: 11px; color: #819086; margin: 7px 0 0; }
 .editor-actions { display: flex; gap: 6px; }
 .editor-actions button { padding: 7px 10px; font-size: 12px; }
+.selection-hint { margin: 0; padding: 8px 20px; color: var(--muted); background: #fafcfb; font-size: 11px; overflow-wrap: anywhere; }
 #editor { resize: vertical; width: 100%; flex: 1; min-height: 420px; border: 0; border-radius: 0; padding: 22px; background: #fff; font: 13px/1.85 Consolas, "Microsoft YaHei", monospace; tab-size: 2; }
 #editor:focus-visible { outline-offset: -3px; }
 #editor::placeholder { color: #acb8af; }
