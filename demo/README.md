@@ -26,7 +26,9 @@ npm run demo
 
 配对凭据仅在当前页面内存中存活，不写入浏览器存储、URL 或事件记录。刷新页面会丢失凭据，需要重启服务取得新配对码。断线重连可复用同一页面的凭据，目录需重新授权。未保存内容在普通断线时保留；授权撤销时清空。
 
-CRLF 文件保存时恢复 CRLF，UTF-8 BOM 原样回传。浏览器文本框不能保留每行混合换行，所以混合换行和独立 CR 文件只读展示。页面不会渲染或执行读入的 HTML、SVG 或脚本。
+编辑区域使用 MIT 开源的 [CodeMirror 6](https://codemirror.net/)，提供行号、按文件名按需加载的语法高亮、撤销/重做、括号匹配、代码折叠和搜索替换（Ctrl/Cmd+F），Tab 缩进。切换文件时重置撤销历史；本地同步更新不触发重复保存，并尽量保留光标与滚动位置。编辑器保持紧凑字体并随工作区高度调整。
+
+CRLF 文件保存时恢复 CRLF，UTF-8 BOM 原样回传。当前同步层将换行统一为 LF 供编辑器显示，因此混合换行和独立 CR 文件仍只读展示。页面不会渲染或执行读入的 HTML、SVG 或脚本。
 
 可直接修改项目根目录的 `.env` 调整端口，启动时会自动加载，也可通过进程环境变量覆盖：
 
@@ -46,6 +48,7 @@ demo/
   src/
     main.js / App.vue        Vue 应用入口和页面组装
     components/              各功能面板
+    editor/code-editor.js    CodeMirror 实例、语言加载与编辑事务适配
     composables/useFolderWorkspace.js  状态与业务交互
     services/folder-client.js          WebSocket 协议客户端
     assets/styles.css        页面样式

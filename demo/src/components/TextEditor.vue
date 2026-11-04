@@ -1,4 +1,8 @@
 <script setup>
+import { defineAsyncComponent } from "vue";
+
+const CodeEditor = defineAsyncComponent(() => import("./CodeEditor.vue"));
+
 const { workspace: w } = defineProps({ workspace: { type: Object, required: true } });
 const { state, subscribed, syncStatus, fileMeta } = w;
 </script>
@@ -11,10 +15,10 @@ const { state, subscribed, syncStatus, fileMeta } = w;
         <button id="refresh" :disabled="!subscribed || state.busy" @click="w.run(w.refreshTree)">刷新</button>
       </div>
     </div>
-    <label class="sr-only" for="editor">文本文件内容</label>
-    <textarea id="editor" :value="state.draft" @input="w.updateDraft($event.target.value)"
-      @compositionstart="w.setComposing(true)" @compositionend="w.updateDraft($event.target.value); w.setComposing(false)"
-      spellcheck="false" :readonly="!subscribed || !state.loaded?.editable || state.busy" placeholder="从左侧打开文件，修改后自动同步到本地。"></textarea>
+    <CodeEditor :model-value="state.draft" :path="state.loaded?.path || ''"
+      :document-key="`${state.subscription?.subscriptionId || ''}:${state.loaded?.path || ''}`"
+      :read-only="!subscribed || !state.loaded?.editable || state.busy"
+      @update:model-value="w.updateDraft" @composition="w.setComposing" />
     <div class="editor-footer" :class="{ 'sync-error': state.syncError }">
       <span role="status" aria-live="polite">{{ syncStatus }}</span>
       <div v-if="subscribed && state.conflict" class="editor-actions">

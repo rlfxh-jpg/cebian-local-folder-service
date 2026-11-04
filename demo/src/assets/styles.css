@@ -105,9 +105,19 @@ summary { cursor: pointer; padding: 12px 0 0; }
 .editor-header p { font-size: 11px; color: #819086; margin: 7px 0 0; }
 .editor-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .editor-actions button { padding: 7px 10px; font-size: 12px; }
-#editor { resize: none; width: 100%; height: 0; flex: 1; min-height: 0; overflow: auto; border: 0; border-radius: 0; padding: 16px; background: #fff; font: 12px/1.75 Consolas, "Microsoft YaHei", monospace; tab-size: 2; }
-#editor:focus-visible { outline-offset: -3px; }
-#editor::placeholder { color: #acb8af; }
+.code-editor { width: 100%; height: 0; flex: 1; min-height: 0; overflow: hidden; background: #fff; }
+.code-editor .cm-editor { height: 100%; font-size: 12px; }
+.code-editor .cm-editor.cm-focused { outline: none; }
+.code-editor .cm-scroller { overflow: auto; font-family: Consolas, "Microsoft YaHei", monospace; line-height: 1.75; }
+.code-editor .cm-content { padding: 12px 0; }
+.code-editor .cm-line { padding: 0 12px; }
+.code-editor .cm-gutters { background: #fafcfb; color: #97a69b; border-right: 1px solid var(--line); }
+.code-editor .cm-activeLine, .code-editor .cm-activeLineGutter { background: #edf5ef; }
+.code-editor .cm-placeholder { color: #acb8af; }
+.code-editor .cm-panels { background: #fafcfb; color: #344c40; }
+.code-editor .cm-search { font: 11px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif; }
+.code-editor .cm-search input { font-size: 11px; padding: 3px 6px; }
+.code-editor .cm-search button { font-size: 11px; padding: 3px 7px; }
 .editor-footer { flex: none; padding: 9px 16px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; color: #87968b; font-size: 11px; gap: 12px; }
 .editor-footer.sync-error { color: #a43c31; background: #fff7f5; }
 .rules { padding: 20px 22px 16px; }
