@@ -1,12 +1,11 @@
 import { computed, onMounted, onUnmounted, reactive } from "vue";
 import { FolderClient } from "../services/folder-client.js";
 
-export function useFolderWorkspace() {
-  const client = new FolderClient();
+export function useFolderWorkspace(client = new FolderClient()) {
   const state = reactive({
     endpoint: "ws://127.0.0.1:8765/ws", pairCode: "", connected: false,
     authenticated: false, subscription: null, busy: false,
-    rootPath: "", directory: "", entries: [], recents: [],
+    directory: "", entries: [], recents: [], directories: Object.create(null), expanded: Object.create(null),
     nextOffset: undefined, truncated: false, searching: false, query: "", showHidden: false,
     selected: null, loaded: null, draft: "", original: "", stale: false,
     hiddenRules: "", stoppedRules: "", ruleVersion: null,
@@ -24,6 +23,7 @@ export function useFolderWorkspace() {
   const dirty = computed(() => Boolean(state.loaded && state.draft !== state.original));
   const canSave = computed(() => subscribed.value && state.loaded?.editable && dirty.value && !state.busy);
   const visibleEntries = computed(() => state.entries.filter((entry) => state.searching || state.showHidden || !entry.hiddenByRule));
+  const entriesFor = (path) => (state.directories[path]?.entries ?? []).filter((entry) => state.showHidden || !entry.hiddenByRule);
   const status = computed(() => !state.connected ? "未连接" : !authorized.value ? "已连接 · 待配对" : subscribed.value ? "已授权 · 已订阅" : "已配对 · 待授权");
   const fileMeta = computed(() => {
     const file = state.loaded;
@@ -49,6 +49,7 @@ export function useFolderWorkspace() {
   function clearWorkspace(clearDraft = true) {
     clearTimeout(refreshTimer); directoryGeneration++; rulesChanged = false;
     state.subscription = null; state.entries = []; state.directory = "";
+    state.directories = Object.create(null); state.expanded = Object.create(null);
     state.nextOffset = undefined; state.searching = false; state.truncated = false;
     state.hiddenRules = ""; state.stoppedRules = ""; state.ruleVersion = null;
     if (clearDraft) clearEditor(); else if (state.loaded) state.stale = true;
@@ -60,14 +61,9 @@ export function useFolderWorkspace() {
   async function removeRecent(path) { await client.request("recent/remove", { path }); await showRecents(); }
   async function acceptSubscription(result) {
     if (result.cancelled) { notice("已取消目录选择。"); return; }
-    clearWorkspace(); state.subscription = result; state.rootPath = result.rootPath;
+    clearWorkspace(); state.subscription = result;
     applyRules(result.rules); await listDirectory(""); await showRecents();
-    notice(`已授权目录：${result.rootPath}。点击文件查看，点击目录进入。`);
-  }
-  async function openRoot(rootPath = state.rootPath) {
-    if (!canDiscard()) return;
-    if (!rootPath.trim()) throw new Error("请输入要授权的绝对目录路径。");
-    await acceptSubscription(await client.request("subscription/open", { rootPath }));
+    notice(`已授权目录：${result.rootPath}。点击目录展开或收起，点击文件查看。`);
   }
   async function chooseRoot() {
     if (canDiscard()) await acceptSubscription(await client.request("folder/choose", {}, 6 * 60_000));
@@ -76,19 +72,105 @@ export function useFolderWorkspace() {
     if (!canDiscard()) return;
     await client.request("subscription/close"); clearWorkspace(); notice("已关闭目录订阅。");
   }
-  async function listDirectory(path = state.directory, append = false) {
-    const generation = ++directoryGeneration;
+  async function fetchDirectory(path, append = false) {
+    const generation = directoryGeneration;
     const subscriptionId = state.subscription?.subscriptionId;
-    const result = await client.request("directory/list", { path, offset: append ? state.nextOffset : 0 });
+    if (!subscriptionId) return;
+    const previous = state.directories[path];
+    const targetCount = append ? 0 : previous?.entries.length ?? 0;
+    let offset = append ? previous?.nextOffset : 0;
+    if (append && offset === undefined) return;
+    const entries = append ? [...previous.entries] : [];
+    let result;
+    do {
+      result = await client.request("directory/list", { path, offset });
+      if (generation !== directoryGeneration || state.subscription?.subscriptionId !== subscriptionId) return;
+      entries.push(...result.entries);
+      offset = result.nextOffset;
+    } while (!append && offset !== undefined && entries.length < targetCount);
     if (generation !== directoryGeneration || state.subscription?.subscriptionId !== subscriptionId) return;
-    state.directory = path; state.searching = false;
-    state.entries = append ? [...state.entries, ...result.entries] : result.entries;
-    state.nextOffset = result.nextOffset; state.truncated = result.truncated;
+    state.directories[path] = { entries, nextOffset: result.nextOffset, truncated: result.truncated };
+    if (path === state.directory && !state.searching) syncCurrentDirectory();
     if (result.scanLimitReached) notice("目录扫描已达到后端上限，当前结果不完整。", true);
   }
+  function syncCurrentDirectory() {
+    const listing = state.directories[state.directory];
+    state.entries = listing?.entries ?? [];
+    state.nextOffset = listing?.nextOffset; state.truncated = listing?.truncated ?? false;
+  }
+  async function revealDirectory(path) {
+    const generation = directoryGeneration;
+    const segments = path ? path.split("/") : [];
+    for (let index = 0; index <= segments.length; index++) {
+      const parent = segments.slice(0, index).join("/");
+      if (!state.directories[parent] || state.directories[parent].error) await fetchDirectory(parent);
+      if (generation !== directoryGeneration || !state.subscription) return;
+      state.expanded[parent] = true;
+      const child = segments.slice(0, index + 1).join("/");
+      while (index < segments.length && !state.directories[parent]?.entries.some((entry) => entry.path === child) && state.directories[parent]?.nextOffset !== undefined) await fetchDirectory(parent, true);
+    }
+  }
+  async function listDirectory(path = state.directory) {
+    const generation = directoryGeneration;
+    await fetchDirectory(path);
+    if (generation !== directoryGeneration || !state.subscription) return;
+    await revealDirectory(path);
+    if (generation !== directoryGeneration) return;
+    state.directory = path; state.searching = false;
+    syncCurrentDirectory();
+  }
+  async function refreshTree() {
+    const generation = directoryGeneration;
+    if (!state.subscription) return;
+    const reachable = new Set();
+    const queue = [""];
+    while (queue.length) {
+      const path = queue.shift();
+      reachable.add(path);
+      try { await fetchDirectory(path); }
+      catch (error) {
+        if (generation !== directoryGeneration) return;
+        if (!path) throw error;
+        state.directories[path] = { entries: [], error: error.message };
+        continue;
+      }
+      if (generation !== directoryGeneration) return;
+      for (const entry of state.directories[path]?.entries ?? []) {
+        if (entry.kind === "directory") {
+          reachable.add(entry.path);
+          if (state.expanded[entry.path] && (state.showHidden || !entry.hiddenByRule)) queue.push(entry.path);
+        }
+      }
+    }
+    for (const path of new Set([...Object.keys(state.directories), ...Object.keys(state.expanded)])) {
+      if (!reachable.has(path)) { delete state.directories[path]; delete state.expanded[path]; }
+    }
+    if (!reachable.has(state.directory)) state.directory = "";
+    if (state.selected && !state.searching) {
+      const parent = state.selected.path.split("/").slice(0, -1).join("/");
+      const listing = state.directories[parent];
+      if (state.selected.path && listing && listing.nextOffset === undefined && !listing.truncated && !listing.entries.some((entry) => entry.path === state.selected.path)) state.selected = null;
+    }
+    if (!state.searching) syncCurrentDirectory();
+  }
+  async function returnToTree() {
+    await revealDirectory(state.directory);
+    state.searching = false; syncCurrentDirectory();
+    await refreshTree();
+  }
   async function selectEntry(entry) {
-    if (entry.kind === "directory") { await listDirectory(entry.path); state.selected = entry; }
-    else await readFile(entry.path);
+    const generation = directoryGeneration;
+    if (entry.kind === "directory") {
+      if (state.searching) { await revealDirectory(entry.path); state.searching = false; }
+      else if (state.expanded[entry.path]) state.expanded[entry.path] = false;
+      else {
+        await fetchDirectory(entry.path);
+        if (generation !== directoryGeneration) return;
+        state.expanded[entry.path] = true;
+      }
+      if (generation !== directoryGeneration) return;
+      state.directory = entry.path; state.selected = entry.path ? entry : null; syncCurrentDirectory();
+    } else if (entry.kind === "file") await readFile(entry.path);
   }
   async function readFile(path) {
     if (!canDiscard()) return;
@@ -96,6 +178,8 @@ export function useFolderWorkspace() {
     const mixed = file.lineEnding === "mixed" || /\r(?!\n)/.test(file.content);
     state.loaded = { ...file, editable: file.writable && !mixed };
     state.selected = { path, kind: "file" }; state.stale = false;
+    state.directory = path.split("/").slice(0, -1).join("/");
+    if (!state.searching) syncCurrentDirectory();
     state.draft = file.content.replace(/\r\n?/g, "\n"); state.original = state.draft;
     notice(mixed ? "混合换行或独立 CR 文件以只读方式展示，防止文本框转换原有换行。" : `已读取 ${path}。保存时会校验磁盘版本。`);
   }
@@ -110,7 +194,7 @@ export function useFolderWorkspace() {
       loaded.version = result.version; loaded.content = content;
       loaded.lineEnding = content.includes("\r\n") ? "crlf" : content.includes("\n") ? "lf" : "none";
       state.original = draft; state.stale = false;
-      notice(`已保存 ${loaded.path}，共 ${result.bytes} 字节。`); await listDirectory();
+      notice(`已保存 ${loaded.path}，共 ${result.bytes} 字节。`); await refreshTree();
     } catch (error) {
       if (error.code === "VERSION_CONFLICT") state.stale = true;
       throw error;
@@ -131,7 +215,7 @@ export function useFolderWorkspace() {
     if (!code) throw new Error("请输入启动终端中的配对码。");
     const result = await client.request("pair/complete", { code, clientName: "Cebian Vue Demo" });
     token = result.token; state.authenticated = true; state.pairCode = "";
-    await showRecents(); notice("配对成功。输入目录路径或使用系统选择器建立授权。");
+    await showRecents(); notice("配对成功。请通过系统选择器选择并授权文件夹。");
   }
   async function serviceStatus() {
     const result = await client.request("service/status");
@@ -139,7 +223,7 @@ export function useFolderWorkspace() {
   }
   async function search() {
     const query = state.query.trim();
-    if (!query) { await listDirectory(); return; }
+    if (!query) { await returnToTree(); return; }
     const result = await client.request("search/name", { query });
     state.searching = true; state.entries = result.results; state.nextOffset = undefined; state.truncated = result.truncated;
     notice(result.truncated ? "搜索触及后端上限，结果不完整。可缩小关键词后重试。" : `搜索完成，找到 ${result.results.length} 个项目。`);
@@ -149,7 +233,8 @@ export function useFolderWorkspace() {
     if (name === null) return;
     if (!name || /[/\\]/.test(name)) throw new Error("请输入单个名称，不能包含路径分隔符。");
     const path = [state.directory, name].filter(Boolean).join("/");
-    await client.request("file/create", { path, kind }); await listDirectory(); notice(`已创建 ${path}。`);
+    await client.request("file/create", { path, kind });
+    await revealDirectory(state.directory); await refreshTree(); notice(`已创建 ${path}。`);
   }
   const contains = (parent, child) => child === parent || child.startsWith(`${parent}/`);
   async function renameEntry() {
@@ -161,7 +246,13 @@ export function useFolderWorkspace() {
     if (state.loaded && contains(selected.path, state.loaded.path)) clearEditor();
     state.selected = null;
     if (contains(selected.path, state.directory)) state.directory = result.path + state.directory.slice(selected.path.length);
-    await listDirectory(); notice(`已重命名为 ${result.path}。`);
+    for (const path of Object.keys(state.expanded)) {
+      if (contains(selected.path, path)) {
+        state.expanded[result.path + path.slice(selected.path.length)] = state.expanded[path];
+        delete state.expanded[path]; delete state.directories[path];
+      }
+    }
+    await refreshTree(); notice(`已重命名为 ${result.path}。`);
   }
   async function deleteEntry() {
     if (!state.selected || !canDiscard()) return;
@@ -172,12 +263,12 @@ export function useFolderWorkspace() {
     if (state.loaded && contains(selected.path, state.loaded.path)) clearEditor();
     state.selected = null;
     if (contains(selected.path, state.directory)) state.directory = selected.path.split("/").slice(0, -1).join("/");
-    await listDirectory(); notice(`已删除 ${selected.path}。`);
+    await refreshTree(); notice(`已删除 ${selected.path}。`);
   }
   async function saveRules() {
     const lines = (text) => text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     applyRules(await client.request("ignore/update", { hidden: lines(state.hiddenRules), stopped: lines(state.stoppedRules) }));
-    await listDirectory(); notice("忽略规则已更新。");
+    await refreshTree(); notice("忽略规则已更新。");
   }
 
   client.onRequest = (method, code, duration) => log(`${method} · ${code ?? "OK"} · ${duration} ms`, Boolean(code));
@@ -211,7 +302,7 @@ export function useFolderWorkspace() {
               if (state.loaded === loaded) state.stale = disk.version.token !== loaded.version.token;
             } catch { if (state.loaded === loaded) state.stale = true; }
           }
-          if (!state.searching) await listDirectory();
+          if (!state.searching) await refreshTree();
           else notice("搜索期间目录或规则发生变化，请重新搜索获取最新结果。");
         });
       };
@@ -239,11 +330,10 @@ export function useFolderWorkspace() {
   });
 
   return {
-    state, authorized, subscribed, dirty, canSave, visibleEntries, status, fileMeta, run,
-    connect, disconnect: () => client.disconnect(), pair, serviceStatus, openRoot, chooseRoot, closeRoot,
+    state, authorized, subscribed, dirty, canSave, visibleEntries, entriesFor, status, fileMeta, run,
+    connect, disconnect: () => client.disconnect(), pair, serviceStatus, chooseRoot, closeRoot,
     showRecents, removeRecent, listDirectory, selectEntry, search, createEntry, renameEntry, deleteEntry,
     saveFile, reloadFile: () => state.loaded && readFile(state.loaded.path), saveRules,
-    goUp: () => listDirectory(state.directory.split("/").slice(0, -1).join("/")),
-    loadMore: () => listDirectory(state.directory, true),
+    refreshTree, returnToTree, loadMore: (path) => fetchDirectory(path, true),
   };
 }

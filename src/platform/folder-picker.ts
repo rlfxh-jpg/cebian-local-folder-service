@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { ServiceError } from "../shared/errors.ts";
 
 export async function chooseFolder(): Promise<string | null> {
-  if (process.platform !== "win32") throw new ServiceError("PICKER_UNAVAILABLE", "此版本的系统文件夹选择器仅支持 Windows；请在页面输入绝对路径。");
+  if (process.platform !== "win32") throw new ServiceError("PICKER_UNAVAILABLE", "此版本的系统文件夹选择器仅支持 Windows；请在支持的交互桌面环境中选择文件夹。");
   const script = "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description = '选择 Cebian 本地文件夹工作台的根目录'; $d.ShowNewFolderButton = $false; if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Write($d.SelectedPath) }";
   return new Promise((resolve, reject) => {
     const child = spawn("powershell.exe", ["-NoProfile", "-STA", "-Command", script], { windowsHide: false, stdio: ["ignore", "pipe", "ignore"] });
