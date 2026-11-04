@@ -8,12 +8,17 @@ export function useFolderWorkspace(client = new FolderClient()) {
     directory: "", entries: [], recents: [], directories: Object.create(null), expanded: Object.create(null),
     nextOffset: undefined, truncated: false, searching: false, query: "", showHidden: false,
     selected: null, loaded: null, draft: "", original: "", stale: false,
+    saving: false, syncing: false, syncError: "", conflict: false,
     hiddenRules: "", stoppedRules: "", ruleVersion: null,
     notice: "准备就绪。点击顶部“连接与配对”，连接本机服务后开始使用。", noticeError: false, logs: [],
   });
   // Credentials stay outside the reactive UI and never enter browser storage or logs.
   let token = "";
   let refreshTimer;
+  let saveTimer;
+  let savePromise;
+  let syncPromise;
+  let composing = false;
   let directoryGeneration = 0;
   let closeNotice = "";
   let disposed = false;
@@ -21,13 +26,16 @@ export function useFolderWorkspace(client = new FolderClient()) {
   const authorized = computed(() => state.connected && state.authenticated);
   const subscribed = computed(() => authorized.value && Boolean(state.subscription));
   const dirty = computed(() => Boolean(state.loaded && state.draft !== state.original));
-  const canSave = computed(() => subscribed.value && state.loaded?.editable && dirty.value && !state.busy);
+  const canSave = computed(() => subscribed.value && state.loaded?.editable && dirty.value && !state.syncError);
+  const syncStatus = computed(() => !state.loaded ? "尚未打开文件" : !subscribed.value ? "连接已断开，未同步内容保留在网页中"
+    : state.syncError || (state.saving ? "正在同步到本地…" : state.syncing ? "正在同步本地变化…"
+      : dirty.value ? "等待自动同步…" : state.loaded.editable ? "已与本地同步" : "只读文件 · 本地变化自动同步"));
   const visibleEntries = computed(() => state.entries.filter((entry) => state.searching || state.showHidden || !entry.hiddenByRule));
   const entriesFor = (path) => (state.directories[path]?.entries ?? []).filter((entry) => state.showHidden || !entry.hiddenByRule);
   const status = computed(() => !state.connected ? "未连接" : !authorized.value ? "已连接 · 待配对" : subscribed.value ? "已授权 · 已订阅" : "已配对 · 待授权");
   const fileMeta = computed(() => {
     const file = state.loaded;
-    return file ? `UTF-8${file.bom ? " BOM" : ""} · ${file.lineEnding.toUpperCase()} · ${file.version.size} 字节 · ${file.editable ? "可编辑" : "只读"}` : "支持 UTF-8 · 显式保存 · 版本冲突保护";
+    return file ? `UTF-8${file.bom ? " BOM" : ""} · ${file.lineEnding.toUpperCase()} · ${file.version.size} 字节 · ${file.editable ? "自动同步" : "只读"}` : "支持 UTF-8 · 双向自动同步 · 版本冲突保护";
   });
 
   function notice(message, error = false) { state.notice = message; state.noticeError = error; }
@@ -44,10 +52,12 @@ export function useFolderWorkspace(client = new FolderClient()) {
     finally { state.busy = false; }
   }
   function clearEditor() {
+    clearTimeout(saveTimer); composing = false;
     state.loaded = null; state.selected = null; state.original = ""; state.draft = ""; state.stale = false;
+    state.syncError = ""; state.conflict = false;
   }
   function clearWorkspace(clearDraft = true) {
-    clearTimeout(refreshTimer); directoryGeneration++; rulesChanged = false;
+    clearTimeout(refreshTimer); clearTimeout(saveTimer); directoryGeneration++; rulesChanged = false;
     state.subscription = null; state.entries = []; state.directory = "";
     state.directories = Object.create(null); state.expanded = Object.create(null);
     state.nextOffset = undefined; state.searching = false; state.truncated = false;
@@ -66,9 +76,11 @@ export function useFolderWorkspace(client = new FolderClient()) {
     notice(`已授权目录：${result.rootPath}。点击目录展开或收起，点击文件查看。`);
   }
   async function chooseRoot() {
+    await flushEdits();
     if (canDiscard()) await acceptSubscription(await client.request("folder/choose", {}, 6 * 60_000));
   }
   async function closeRoot() {
+    await flushEdits();
     if (!canDiscard()) return;
     await client.request("subscription/close"); clearWorkspace(); notice("已关闭目录订阅。");
   }
@@ -173,32 +185,126 @@ export function useFolderWorkspace(client = new FolderClient()) {
     } else if (entry.kind === "file") await readFile(entry.path);
   }
   async function readFile(path) {
+    await flushEdits();
     if (!canDiscard()) return;
+    const subscription = state.subscription;
     const file = await client.request("file/read", { path });
-    const mixed = file.lineEnding === "mixed" || /\r(?!\n)/.test(file.content);
-    state.loaded = { ...file, editable: file.writable && !mixed };
-    state.selected = { path, kind: "file" }; state.stale = false;
+    if (disposed || !subscribed.value || state.subscription !== subscription) return;
+    applyFile(file);
+    state.selected = { path, kind: "file" };
     state.directory = path.split("/").slice(0, -1).join("/");
     if (!state.searching) syncCurrentDirectory();
-    state.draft = file.content.replace(/\r\n?/g, "\n"); state.original = state.draft;
-    notice(mixed ? "混合换行或独立 CR 文件以只读方式展示，防止文本框转换原有换行。" : `已读取 ${path}。保存时会校验磁盘版本。`);
+    notice(state.loaded.editable ? `已打开 ${path}，网页与本地内容自动同步。` : "文件以只读方式展示，本地变化会自动同步。");
   }
-  async function saveFile() {
-    if (!subscribed.value || !state.loaded?.editable || !dirty.value) return;
+  const normalized = (file) => file.content.replace(/\r\n?/g, "\n");
+  function applyFile(file) {
+    clearTimeout(saveTimer);
+    const mixed = file.lineEnding === "mixed" || /\r(?!\n)/.test(file.content);
+    state.loaded = { ...file, editable: file.writable && !mixed, preferredLineEnding: file.lineEnding === "crlf" ? "crlf" : "lf" };
+    state.original = normalized(file); state.draft = state.original;
+    state.stale = false; state.conflict = false; state.syncError = "";
+  }
+  function scheduleSave() {
+    clearTimeout(saveTimer);
+    if (disposed || composing || !canSave.value) return;
+    saveTimer = setTimeout(() => {
+      if (state.busy) { scheduleSave(); return; }
+      void saveFile().catch(report);
+    }, 250);
+  }
+  function updateDraft(value) {
+    state.draft = value;
+    scheduleSave();
+  }
+  function setComposing(value) { composing = value; if (value) clearTimeout(saveTimer); else scheduleSave(); }
+  async function flushEdits() {
+    try { if (savePromise) await savePromise; if (canSave.value) await saveFile(); }
+    catch (error) { report(error); }
+  }
+  function saveFile() {
+    clearTimeout(saveTimer);
+    if (savePromise) return savePromise;
+    const pendingSync = syncPromise;
+    savePromise = (async () => {
+      if (pendingSync) await pendingSync;
+      if (!canSave.value || composing || disposed) return;
+      const loaded = state.loaded;
+      const subscription = state.subscription;
+      state.saving = true;
+      try {
+        // A newer draft may arrive during a request. Write it next, using the returned version.
+        while (state.loaded === loaded && state.subscription === subscription && canSave.value && !composing) {
+          const draft = state.draft;
+          const content = loaded.preferredLineEnding === "crlf" ? draft.replace(/\n/g, "\r\n") : draft;
+          const result = await client.request("file/save", { path: loaded.path, content, expectedVersion: loaded.version.token, bom: loaded.bom });
+          if (state.loaded !== loaded || state.subscription !== subscription || disposed) return;
+          loaded.version = result.version; loaded.content = content;
+          loaded.lineEnding = content.includes("\r\n") ? "crlf" : content.includes("\n") ? "lf" : "none";
+          state.original = draft; state.stale = false;
+        }
+      } catch (error) {
+        if (state.loaded === loaded && state.subscription === subscription) {
+          state.stale = true; state.conflict = error.code === "VERSION_CONFLICT";
+          state.syncError = state.conflict ? "网页与本地同时发生修改，自动同步已暂停。请选择保留的内容。" : `自动同步失败：${error.message}`;
+          clearTimeout(saveTimer);
+        }
+        throw error;
+      } finally { state.saving = false; }
+    })().finally(() => { savePromise = undefined; });
+    return savePromise;
+  }
+  function syncFile() {
+    if (syncPromise) return syncPromise;
+    const pendingSave = savePromise;
+    syncPromise = (async () => {
+      if (pendingSave) await pendingSave.catch(() => {});
+      const loaded = state.loaded;
+      const subscription = state.subscription;
+      if (!loaded || !subscribed.value || disposed) return;
+      state.syncing = true;
+      try {
+        const disk = await client.request("file/read", { path: loaded.path });
+        if (state.loaded !== loaded || state.subscription !== subscription || disposed) return;
+        if (disk.version.token === loaded.version.token) {
+          state.stale = false;
+          if (!dirty.value) { state.syncError = ""; state.conflict = false; }
+          return;
+        }
+        if (!dirty.value || normalized(disk) === state.draft) applyFile(disk);
+        else {
+          state.stale = true; state.conflict = true;
+          state.syncError = "网页与本地同时发生修改，自动同步已暂停。请选择保留的内容。";
+          clearTimeout(saveTimer);
+        }
+      } catch (error) {
+        if (state.loaded === loaded && state.subscription === subscription) {
+          state.stale = true; state.syncError = `无法同步本地文件：${error.message}`;
+          clearTimeout(saveTimer);
+        }
+      } finally { state.syncing = false; }
+    })().finally(() => { syncPromise = undefined; });
+    return syncPromise;
+  }
+  async function resolveConflict(useDraft) {
+    if (savePromise) await savePromise.catch(() => {});
+    if (syncPromise) await syncPromise;
     const loaded = state.loaded;
+    const subscription = state.subscription;
+    if (!loaded || !subscribed.value) return;
+    if (useDraft && !confirm(`使用网页内容覆盖本地 ${loaded.path}？将再次校验本地版本。`)) return;
+    const disk = await client.request("file/read", { path: loaded.path });
+    if (state.loaded !== loaded || state.subscription !== subscription) return;
     const draft = state.draft;
-    const content = loaded.lineEnding === "crlf" ? draft.replace(/\n/g, "\r\n") : draft;
-    try {
-      const result = await client.request("file/save", { path: loaded.path, content, expectedVersion: loaded.version.token, bom: loaded.bom });
-      if (state.loaded !== loaded || !subscribed.value) return;
-      loaded.version = result.version; loaded.content = content;
-      loaded.lineEnding = content.includes("\r\n") ? "crlf" : content.includes("\n") ? "lf" : "none";
-      state.original = draft; state.stale = false;
-      notice(`已保存 ${loaded.path}，共 ${result.bytes} 字节。`); await refreshTree();
-    } catch (error) {
-      if (error.code === "VERSION_CONFLICT") state.stale = true;
-      throw error;
+    applyFile(disk);
+    if (useDraft) {
+      if (!state.loaded.editable) { state.draft = draft; state.syncError = "本地文件当前只读，网页内容已保留。"; return; }
+      state.draft = draft; await saveFile();
     }
+  }
+  async function retrySync() {
+    state.syncError = "";
+    await syncFile();
+    if (canSave.value) await saveFile();
   }
   async function connect() {
     const url = new URL(state.endpoint);
@@ -239,6 +345,7 @@ export function useFolderWorkspace(client = new FolderClient()) {
   const contains = (parent, child) => child === parent || child.startsWith(`${parent}/`);
   async function renameEntry(selected = state.selected) {
     if (!subscribed.value || !selected?.path || !["file", "directory"].includes(selected.kind)) return;
+    if (savePromise) await savePromise.catch(() => {});
     if (state.loaded && contains(selected.path, state.loaded.path) && !canDiscard()) return;
     const newName = prompt(`重命名 ${selected.path}（只修改名称）：`, selected.path.split("/").at(-1));
     if (newName === null) return;
@@ -258,6 +365,7 @@ export function useFolderWorkspace(client = new FolderClient()) {
   }
   async function deleteEntry(selected = state.selected) {
     if (!subscribed.value || !selected?.path || !["file", "directory"].includes(selected.kind)) return;
+    if (savePromise) await savePromise.catch(() => {});
     if (state.loaded && contains(selected.path, state.loaded.path) && !canDiscard()) return;
     const inspection = await client.request("entry/inspect-delete", { path: selected.path });
     if (!confirm(`将永久删除 ${selected.path}\n范围：${inspection.itemCount} 个项目（包括目标自身）${inspection.recursive ? "，含目录中的所有内容" : ""}。\n确定继续吗？`)) return;
@@ -296,16 +404,10 @@ export function useFolderWorkspace(client = new FolderClient()) {
       clearTimeout(refreshTimer);
       const refresh = async () => {
         if (disposed || !subscribed.value) return;
-        if (state.busy) { refreshTimer = setTimeout(refresh, 300); return; }
+        if (state.busy || state.saving || composing) { refreshTimer = setTimeout(refresh, 300); return; }
         await run(async () => {
           if (rulesChanged) { rulesChanged = false; applyRules(await client.request("ignore/get")); }
-          if (state.loaded && state.stale) {
-            const loaded = state.loaded;
-            try {
-              const disk = await client.request("file/read", { path: loaded.path });
-              if (state.loaded === loaded) state.stale = disk.version.token !== loaded.version.token;
-            } catch { if (state.loaded === loaded) state.stale = true; }
-          }
+          await syncFile();
           if (!state.searching) await refreshTree();
           else notice("搜索期间目录或规则发生变化，请重新搜索获取最新结果。");
         });
@@ -315,10 +417,10 @@ export function useFolderWorkspace(client = new FolderClient()) {
   };
   function onKeydown(event) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-      event.preventDefault(); if (canSave.value) void run(saveFile);
+      event.preventDefault(); if (canSave.value) void saveFile().catch(report);
     }
   }
-  function beforeUnload(event) { if (dirty.value) { event.preventDefault(); event.returnValue = ""; } }
+  function beforeUnload(event) { if (dirty.value || state.saving) { event.preventDefault(); event.returnValue = ""; } }
   onMounted(async () => {
     document.addEventListener("keydown", onKeydown); window.addEventListener("beforeunload", beforeUnload);
     try {
@@ -328,16 +430,16 @@ export function useFolderWorkspace(client = new FolderClient()) {
     } catch (error) { report(error); }
   });
   onUnmounted(() => {
-    disposed = true; clearTimeout(refreshTimer);
+    disposed = true; clearTimeout(refreshTimer); clearTimeout(saveTimer);
     document.removeEventListener("keydown", onKeydown); window.removeEventListener("beforeunload", beforeUnload);
     client.onEvent = client.onClose = client.onRequest = () => {}; client.disconnect(); token = "";
   });
 
   return {
-    state, authorized, subscribed, dirty, canSave, visibleEntries, entriesFor, status, fileMeta, run,
+    state, authorized, subscribed, dirty, canSave, syncStatus, visibleEntries, entriesFor, status, fileMeta, run,
     connect, disconnect: () => client.disconnect(), pair, serviceStatus, chooseRoot, closeRoot,
     showRecents, removeRecent, listDirectory, selectEntry, search, createEntry, renameEntry, deleteEntry,
-    saveFile, reloadFile: () => state.loaded && readFile(state.loaded.path), saveRules,
+    saveFile, updateDraft, setComposing, resolveConflict, retrySync, saveRules,
     refreshTree, returnToTree, loadMore: (path) => fetchDirectory(path, true),
   };
 }

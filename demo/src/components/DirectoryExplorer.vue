@@ -101,8 +101,8 @@ onUnmounted(() => {
       </template>
       <p v-if="!state.subscription" class="empty">通过系统选择器授权文件夹后，目录树会显示在这里。</p>
     </div>
-    <div class="list-footer">
-      <span>{{ state.searching ? `${visibleEntries.length} 个搜索结果${state.truncated ? ' · 结果不完整' : ''}` : '点击展开 / 查看 · 右键管理文件和目录' }}</span>
+    <div v-if="state.searching" class="list-footer">
+      <span>{{ `${visibleEntries.length} 个搜索结果${state.truncated ? ' · 结果不完整' : ''}` }}</span>
     </div>
   </section>
   <Teleport to="body">
