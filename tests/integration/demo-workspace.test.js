@@ -229,6 +229,36 @@ test("目录树按需展开、分支分页、搜索返回及变更同步，Vue �
     await workspace.refreshTree();
     assert.equal(state.draft, "unsaved deep draft", "目录刷新不能丢弃编辑草稿");
 
+    // Rename/delete the context target while a different file has unsaved changes.
+    globalThis.prompt = () => "renamed-context.txt";
+    globalThis.confirm = (message) => {
+      assert.ok(!message.includes("放弃"), "操作其他项目不应要求放弃当前草稿");
+      assert.match(message, /beta\/renamed-context\.txt/);
+      return true;
+    };
+    state.query = "context"; await workspace.search();
+    await workspace.renameEntry({ path: "beta/context.txt", kind: "file" });
+    assert.equal(await readFile(path.join(root, "beta", "renamed-context.txt"), "utf8"), "");
+    assert.ok(state.entries.some((entry) => entry.path === "beta/renamed-context.txt"));
+    assert.ok(!state.entries.some((entry) => entry.path === "beta/context.txt"));
+    await workspace.deleteEntry({ path: "beta/renamed-context.txt", kind: "file" });
+    await assert.rejects(stat(path.join(root, "beta", "renamed-context.txt")), { code: "ENOENT" });
+    assert.ok(!state.entries.some((entry) => entry.path === "beta/renamed-context.txt"));
+    assert.equal(state.selected.path, selectedPath);
+    assert.equal(state.draft, "unsaved deep draft");
+    await workspace.returnToTree();
+
+    // Root actions and cancelling a discard must leave the open file intact.
+    globalThis.prompt = () => { throw new Error("不应弹出重命名提示"); };
+    globalThis.confirm = () => false;
+    await workspace.renameEntry({ path: "", kind: "directory" });
+    await workspace.deleteEntry({ path: "", kind: "directory" });
+    await workspace.renameEntry({ path: "alpha/nested", kind: "directory" });
+    await workspace.deleteEntry({ path: "alpha/nested", kind: "directory" });
+    assert.equal(await readFile(path.join(root, "alpha", "nested", "deep.txt"), "utf8"), "deep");
+    assert.equal(state.draft, "unsaved deep draft");
+    globalThis.confirm = () => true;
+
     // A directory found through search opens its ancestor chain in the tree.
     await workspace.selectEntry(alpha);
     state.query = "nested"; await workspace.search();

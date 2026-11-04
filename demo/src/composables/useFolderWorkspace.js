@@ -237,14 +237,14 @@ export function useFolderWorkspace(client = new FolderClient()) {
     await revealDirectory(directory); await refreshTree(); notice(`已创建 ${path}。`);
   }
   const contains = (parent, child) => child === parent || child.startsWith(`${parent}/`);
-  async function renameEntry() {
-    if (!state.selected || !canDiscard()) return;
-    const selected = state.selected;
+  async function renameEntry(selected = state.selected) {
+    if (!subscribed.value || !selected?.path || !["file", "directory"].includes(selected.kind)) return;
+    if (state.loaded && contains(selected.path, state.loaded.path) && !canDiscard()) return;
     const newName = prompt(`重命名 ${selected.path}（只修改名称）：`, selected.path.split("/").at(-1));
     if (newName === null) return;
     const result = await client.request("entry/rename", { path: selected.path, newName });
     if (state.loaded && contains(selected.path, state.loaded.path)) clearEditor();
-    state.selected = null;
+    if (state.selected && contains(selected.path, state.selected.path)) state.selected = null;
     if (contains(selected.path, state.directory)) state.directory = result.path + state.directory.slice(selected.path.length);
     for (const path of Object.keys(state.expanded)) {
       if (contains(selected.path, path)) {
@@ -252,18 +252,22 @@ export function useFolderWorkspace(client = new FolderClient()) {
         delete state.expanded[path]; delete state.directories[path];
       }
     }
-    await refreshTree(); notice(`已重命名为 ${result.path}。`);
+    await refreshTree();
+    if (state.searching) await search();
+    notice(`已重命名为 ${result.path}。`);
   }
-  async function deleteEntry() {
-    if (!state.selected || !canDiscard()) return;
-    const selected = state.selected;
+  async function deleteEntry(selected = state.selected) {
+    if (!subscribed.value || !selected?.path || !["file", "directory"].includes(selected.kind)) return;
+    if (state.loaded && contains(selected.path, state.loaded.path) && !canDiscard()) return;
     const inspection = await client.request("entry/inspect-delete", { path: selected.path });
     if (!confirm(`将永久删除 ${selected.path}\n范围：${inspection.itemCount} 个项目（包括目标自身）${inspection.recursive ? "，含目录中的所有内容" : ""}。\n确定继续吗？`)) return;
     await client.request("entry/delete", { path: selected.path, confirmationVersion: inspection.version });
     if (state.loaded && contains(selected.path, state.loaded.path)) clearEditor();
-    state.selected = null;
+    if (state.selected && contains(selected.path, state.selected.path)) state.selected = null;
     if (contains(selected.path, state.directory)) state.directory = selected.path.split("/").slice(0, -1).join("/");
-    await refreshTree(); notice(`已删除 ${selected.path}。`);
+    await refreshTree();
+    if (state.searching) await search();
+    notice(`已删除 ${selected.path}。`);
   }
   async function saveRules() {
     const lines = (text) => text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);

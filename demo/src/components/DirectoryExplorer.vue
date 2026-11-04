@@ -12,10 +12,12 @@ function closeMenu(restoreFocus = false) {
   if (restoreFocus) trigger?.focus();
 }
 async function openMenu({ entry, event }) {
+  if (!subscribed.value || state.busy || !["file", "directory"].includes(entry.kind)) return;
+  event.preventDefault();
   const trigger = event.currentTarget;
   const rect = trigger.getBoundingClientRect();
   const keyboard = event.type === "keydown" || (!event.clientX && !event.clientY);
-  menu.value = { path: entry.path, name: entry.name, trigger,
+  menu.value = { entry: { path: entry.path, name: entry.name, kind: entry.kind }, trigger,
     x: keyboard ? rect.left : event.clientX, y: keyboard ? rect.bottom : event.clientY };
   await nextTick();
   if (!menu.value || !menuElement.value) return;
@@ -25,10 +27,15 @@ async function openMenu({ entry, event }) {
     y: Math.max(8, Math.min(menu.value.y, window.innerHeight - bounds.height - 8)) };
   menuElement.value.querySelector("button")?.focus();
 }
-function createEntry(kind) {
+function runMenuAction(action) {
   const target = menu.value;
   closeMenu(true);
-  if (target && subscribed.value && !state.busy) w.run(() => w.createEntry(kind, target.path));
+  if (target && subscribed.value && !state.busy) w.run(() => action(target.entry));
+}
+function openSearchMenu(entry, event) {
+  if (event.type === "contextmenu" || event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+    openMenu({ entry, event });
+  }
 }
 function onPointerdown(event) {
   if (!menuElement.value?.contains(event.target)) closeMenu();
@@ -79,13 +86,14 @@ onUnmounted(() => {
     <div class="breadcrumb">{{ state.searching ? `名称搜索：${state.query}` : `操作目录：/${state.directory}` }}</div>
     <div class="entries">
       <ul v-if="!state.searching && state.subscription" class="directory-tree" aria-label="工作区目录树">
-        <DirectoryTreeNode :workspace="w" :entry="{ path: '', name: state.subscription.root, kind: 'directory' }" @directory-menu="openMenu" />
+        <DirectoryTreeNode :workspace="w" :entry="{ path: '', name: state.subscription.root, kind: 'directory' }" @entry-menu="openMenu" />
       </ul>
       <template v-if="state.searching">
       <button v-for="entry in visibleEntries" :key="entry.path" class="entry"
         :class="{ selected: state.selected?.path === entry.path, 'hidden-entry': entry.hiddenByRule }"
         :disabled="!subscribed || state.busy || !['file', 'directory'].includes(entry.kind)"
-        @click="w.run(() => w.selectEntry(entry))">
+        :aria-haspopup="['file', 'directory'].includes(entry.kind) ? 'menu' : undefined"
+        @click="w.run(() => w.selectEntry(entry))" @contextmenu="openSearchMenu(entry, $event)" @keydown="openSearchMenu(entry, $event)">
         <FileIcon :kind="entry.kind" />
         <span class="entry-label">{{ entry.name }}<small v-if="state.searching">{{ entry.path }}{{ entry.hiddenByRule ? ' · 隐藏项' : '' }}</small></span>
       </button>
@@ -94,14 +102,24 @@ onUnmounted(() => {
       <p v-if="!state.subscription" class="empty">通过系统选择器授权文件夹后，目录树会显示在这里。</p>
     </div>
     <div class="list-footer">
-      <span>{{ state.searching ? `${visibleEntries.length} 个搜索结果${state.truncated ? ' · 结果不完整' : ''}` : '点击展开 / 查看 · 右键目录新建' }}</span>
+      <span>{{ state.searching ? `${visibleEntries.length} 个搜索结果${state.truncated ? ' · 结果不完整' : ''}` : '点击展开 / 查看 · 右键管理文件和目录' }}</span>
     </div>
   </section>
   <Teleport to="body">
-    <div v-if="menu" ref="menuElement" class="directory-context-menu" role="menu" :aria-label="`在 ${menu.name} 中新建`"
+    <div v-if="menu" ref="menuElement" class="entry-context-menu" role="menu" :aria-label="`${menu.entry.name} 的操作菜单`"
       :style="{ left: `${menu.x}px`, top: `${menu.y}px` }" @contextmenu.prevent>
-      <button id="new-file" role="menuitem" :disabled="!subscribed || state.busy" @click="createEntry('file')"><FileIcon kind="file" />新建文件</button>
-      <button id="new-folder" role="menuitem" :disabled="!subscribed || state.busy" @click="createEntry('directory')"><FileIcon kind="directory" />新建目录</button>
+      <template v-if="menu.entry.kind === 'directory'">
+        <button id="new-file" role="menuitem" :disabled="!subscribed || state.busy" @click="runMenuAction(entry => w.createEntry('file', entry.path))"><FileIcon kind="file" />新建文件</button>
+        <button id="new-folder" role="menuitem" :disabled="!subscribed || state.busy" @click="runMenuAction(entry => w.createEntry('directory', entry.path))"><FileIcon kind="directory" />新建目录</button>
+      </template>
+      <template v-if="menu.entry.path">
+        <button id="rename-entry" role="menuitem" :disabled="!subscribed || state.busy" @click="runMenuAction(w.renameEntry)">
+          <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 4 5 5M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14v6ZM13 20h8" /></svg>重命名
+        </button>
+        <button id="delete-entry" class="danger" role="menuitem" :disabled="!subscribed || state.busy" @click="runMenuAction(w.deleteEntry)">
+          <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></svg>删除
+        </button>
+      </template>
     </div>
   </Teleport>
 </template>
