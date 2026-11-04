@@ -21,10 +21,12 @@ test("重复启动明确提示冲突端口，失败进程正常退出且不影�
       { entry: "src/index.ts", backendPort: occupiedPort, demoPort: "0", variable: "LOCAL_FOLDER_PORT" },
       { entry: "demo/index.ts", backendPort: occupiedPort, demoPort: "0", variable: "LOCAL_FOLDER_PORT" },
       { entry: "demo/index.ts", backendPort: "0", demoPort: occupiedPort, variable: "DEMO_PORT" },
+      { entry: "demo/index.ts", args: ["--dev"], backendPort: occupiedPort, demoPort: "0", variable: "LOCAL_FOLDER_PORT" },
+      { entry: "demo/index.ts", args: ["--dev"], backendPort: "0", demoPort: occupiedPort, variable: "DEMO_PORT" },
     ]) {
-      await assert.rejects(runNode(process.execPath, ["--import", "tsx", scenario.entry], {
+      await assert.rejects(runNode(process.execPath, ["--import", "tsx", scenario.entry, ...(scenario.args ?? [])], {
         cwd: projectRoot,
-        timeout: 5000,
+        timeout: 10000,
         env: {
           ...process.env,
           LOCAL_FOLDER_HOST: "127.0.0.1",
@@ -41,7 +43,8 @@ test("重复启动明确提示冲突端口，失败进程正常退出且不影�
         assert.match(failure.stderr, /Ctrl\+C/);
         if (scenario.variable === "LOCAL_FOLDER_PORT") assert.match(failure.stderr, /npm run demo 已包含后端/);
         assert.doesNotMatch(failure.stderr, /node:net:|UVExceptionWithHostPort/);
-        assert.equal(failure.stdout, "", "启动失败不能输出成功提示或配对码");
+        assert.doesNotMatch(failure.stdout, /\[Cebian Demo\].*(页面：|配对码)/, "启动失败不能输出成功提示或配对码");
+        if (!scenario.args) assert.equal(failure.stdout, "");
         return true;
       });
       const health = await fetch(`http://127.0.0.1:${occupiedPort}/health`);

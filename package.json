@@ -10,7 +10,7 @@
     "dev": "tsx src/index.ts",
     "start": "tsx src/index.ts",
     "admin": "tsx src/cli/admin.ts",
-    "demo": "npm run demo:build && npm run demo:serve",
+    "demo": "tsx watch --clear-screen=false --include \"src/**/*.ts\" --include demo/vite.config.ts --exclude \"demo/src/**\" demo/index.ts --dev",
     "demo:build": "vite build --config demo/vite.config.ts",
     "demo:serve": "tsx demo/index.ts",
     "check": "tsc --noEmit",

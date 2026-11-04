@@ -9,7 +9,11 @@ npm install
 npm run demo
 ```
 
-该命令自动构建 Vue 前端到 `demo/dist/`，再同时启动页面服务和后端。单独构建可执行 `npm run demo:build`；已有构建时可执行 `npm run demo:serve` 直接启动。修改源码后重新运行 `npm run demo`。
+该命令以开发模式同时启动 Vite 页面服务和后端，无需预先构建。修改 `demo/src/` 中的 Vue、JavaScript 或 CSS 后，页面自动热更新；修改后端 `src/`、Demo 服务代码或 `demo/vite.config.ts` 后，服务自动重启。修改 `.env` 后需要手动重启命令。
+
+后端自动重启会断开当前连接并结束目录授权，需要重新连接服务并通过系统选择器授权目录；页面凭据丢失时，使用终端最新输出的配对码。端口设为 `0` 时，重启后的地址可能变化，请打开最新页面地址。
+
+需要预览构建产物时，先执行 `npm run demo:build`，再执行 `npm run demo:serve`。该预览模式不监听源码变化。
 
 1. 打开终端输出的页面地址，默认 `http://127.0.0.1:4173`。
 2. 点击顶部“连接与配对”打开弹窗，连接服务后输入同一终端显示的一次性配对码并配对。顶部“请求与实时事件”另开一个弹窗查看日志。弹窗可用关闭按钮、Esc 或点击背景关闭。
@@ -37,7 +41,7 @@ DEMO_PORT=4173
 
 ```text
 demo/
-  index.ts / server.ts       联调启动命令和构建产物服务
+  index.ts / server.ts       联调启动命令、开发热更新和构建产物服务
   index.html / vite.config.ts
   src/
     main.js / App.vue        Vue 应用入口和页面组装
