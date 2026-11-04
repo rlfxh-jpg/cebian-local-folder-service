@@ -10,9 +10,11 @@
     "dev": "tsx src/index.ts",
     "start": "tsx src/index.ts",
     "admin": "tsx src/cli/admin.ts",
-    "demo": "tsx demo/index.ts",
+    "demo": "npm run demo:build && npm run demo:serve",
+    "demo:build": "vite build --config demo/vite.config.ts",
+    "demo:serve": "tsx demo/index.ts",
     "check": "tsc --noEmit",
-    "test": "tsx --test tests/unit/*.test.ts tests/integration/*.test.ts"
+    "test": "npm run demo:build && tsx --test tests/unit/*.test.ts tests/integration/*.test.*"
   },
   "dependencies": {
     "picomatch": "^4.0.2",

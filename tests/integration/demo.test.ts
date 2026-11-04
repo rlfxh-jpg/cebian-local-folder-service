@@ -9,7 +9,7 @@ import { startDemo } from "../../demo/server.ts";
 import { readConfig } from "../../src/config/index.ts";
 import { request } from "../helpers/protocol.ts";
 
-test("demo 仅提供固定静态资源，显式允许当前页面来源并保持配对和版本保护", async () => {
+test("Vue demo 提供构建资源，显式允许当前页面来源并保持配对和版本保护", async () => {
   const sandbox = await mkdtemp(path.join(os.tmpdir(), "cebian-demo-test-"));
   const root = path.join(sandbox, "workspace");
   await mkdir(root);
@@ -21,16 +21,26 @@ test("demo 仅提供固定静态资源，显式允许当前页面来源并保持
     assert.equal(config.allowedOrigins.size, 0, "demo 不应修改调用方的生产配置");
     const page = await fetch(demo.url);
     assert.equal(page.status, 200);
-    assert.match(await page.text(), /本地文件工作台/);
+    const html = await page.text();
+    assert.match(html, /本地文件工作台/);
+    assert.match(html, /id="app"/);
     assert.match(page.headers.get("content-security-policy") ?? "", /frame-ancestors 'none'/);
-    for (const asset of ["app.js", "client.js", "styles.css"]) {
-      const response = await fetch(`${demo.url}/${asset}`);
+    const assets = [...html.matchAll(/(?:src|href)="(\/assets\/[^\"]+)"/g)].map((match) => match[1]);
+    assert.ok(assets.some((asset) => asset.endsWith(".js")), "页面必须引用 Vite 构建的脚本");
+    assert.ok(assets.some((asset) => asset.endsWith(".css")), "页面必须引用构建的样式");
+    for (const asset of assets) {
+      const response = await fetch(`${demo.url}${asset}`);
       assert.equal(response.status, 200);
       assert.equal(response.headers.get("cache-control"), "no-store");
+      assert.match(response.headers.get("content-type") ?? "", asset.endsWith(".js") ? /javascript/ : /css/);
+      assert.ok((await response.text()).length > 0);
     }
     const settings = await (await fetch(`${demo.url}/config.json`)).json() as { websocketUrl: string };
     assert.equal(settings.websocketUrl, demo.service.url);
     assert.equal((await fetch(`${demo.url}/src/index.ts`)).status, 404);
+    assert.equal((await fetch(`${demo.url}/src/App.vue`)).status, 404);
+    assert.equal((await fetch(`${demo.url}/.env`)).status, 404);
+    assert.equal((await fetch(`${demo.url}/assets/missing.js`)).status, 404);
     assert.equal((await fetch(`${demo.url}/%2e%2e/package.json`)).status, 404);
     assert.equal((await fetch(`${demo.url}/`, { method: "POST" })).status, 405);
 

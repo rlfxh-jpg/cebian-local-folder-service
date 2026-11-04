@@ -11,6 +11,7 @@ import { createRouter } from "../protocol/router.ts";
 import { protocolVersion, type Connection, type RequestMessage } from "../protocol/types.ts";
 import { sendEvent, sendResponse } from "../protocol/responses.ts";
 import { consumeRate, isRecord } from "../protocol/validation.ts";
+import { listen } from "./listen.ts";
 
 export async function startService(config: ServiceConfig): Promise<{ close: () => Promise<void>; url: string; pairingCode: string; state: StateStore }> {
   const state = new StateStore(config.dataDir);
@@ -119,10 +120,7 @@ export async function startService(config: ServiceConfig): Promise<{ close: () =
   }
 
   try {
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(config.port, config.host, () => { server.off("error", reject); resolve(); });
-    });
+    await listen(server, config.host, config.port, "后端服务", "LOCAL_FOLDER_PORT");
   } catch (error) {
     clearInterval(heartbeat);
     clearInterval(revokePoll);

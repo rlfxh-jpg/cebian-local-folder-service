@@ -23,14 +23,18 @@ Firefox 可将实际来源配置为 `moz-extension://<扩展UUID>`。支持多�
 
 服务可通过 `folder/choose` 弹出 Windows 文件夹选择器；用户也可在页面输入绝对路径并通过 `subscription/open` 授权。扩展不得在后台静默选择或切换目录。
 
-## Demo 页面
+## Vue Demo 页面
 
 ```powershell
 npm install
 npm run demo
 ```
 
-打开 **http://127.0.0.1:4173**，点击“连接服务”，输入终端显示的配对码，再输入本机绝对目录路径或使用系统选择器。该命令同时启动后端和 `demo/` 中的页面；无需先执行 `npm run dev`，也不需要配置扩展来源。按 `Ctrl+C` 同时关闭两者。
+打开 **http://127.0.0.1:4173**，点击“连接服务”，输入终端显示的配对码，再输入本机绝对目录路径或使用系统选择器。该命令通过 Vite 构建 Vue 3 前端，再同时启动后端和 `demo/` 中的页面。按 `Ctrl+C` 同时关闭两者。
+
+根目录的 `.env` 是可直接使用的配置文件，后端和 demo 启动时会自动加载；可以直接修改其中的端口、扩展来源与文件限制。单独构建前端执行 `npm run demo:build`，复用已构建页面执行 `npm run demo:serve`。修改 Vue 源码后重新执行 `npm run demo` 即可。
+
+`npm run demo` 已包含后端，使用 demo 时只运行这一个命令即可。若提示 `8765` 端口被占用，请先在已有服务的终端按 `Ctrl+C` 再启动。需要另起一套服务时，修改 `.env` 中的 `LOCAL_FOLDER_PORT`；如果 demo 页面端口也被占用，同时修改 `DEMO_PORT`。
 
 页面可浏览目录、分页、按名称搜索、读取和编辑 UTF-8 文件、新建文件/目录、重命名、确认删除、管理最近目录与忽略规则，并查看实时事件。保存携带读取版本；发生冲突时保留编辑内容，由用户决定是否重新读取。CRLF 和 BOM 会保留，混合换行或独立 CR 文件只读展示。
 
@@ -50,7 +54,7 @@ npm run admin -- revoke-all
 
 授权撤销后，服务会在最多约 2 秒内关闭对应活动连接。配对记录、最近目录和忽略规则默认保存在 `%LOCALAPPDATA%\Cebian\LocalFolderService\state.json`；文件内容和编辑草稿不保存在服务端。
 
-默认读取与保存上限为 5 MiB。大目录返回截断标志，名称搜索最多扫描 20,000 项、返回 500 项或运行 5 秒。可通过 `.env` 或进程环境变量覆盖 `.env.example` 中的限制。
+默认读取与保存上限为 5 MiB。大目录返回截断标志，名称搜索最多扫描 20,000 项、返回 500 项或运行 5 秒。可直接修改根目录 `.env` 中的配置；进程环境变量优先于文件中的值。
 
 ## 协议与安全
 
@@ -66,6 +70,7 @@ src/
   cli/admin.ts               本机授权查询与撤销命令
   config/index.ts            环境变量与配置校验
   server/service.ts          HTTP、WebSocket 连接与生命周期
+  server/listen.ts           端口监听与启动错误提示
   protocol/
     types.ts                 协议与连接上下文类型
     router.ts                方法路由、配对与目录订阅
@@ -80,13 +85,19 @@ src/
   watchers/registry.ts       共享目录监听与漏报校验
   platform/folder-picker.ts  Windows 系统目录选择器
   shared/errors.ts           统一服务错误与系统错误映射
-demo/                        独立演示页面，与 src 同级
+demo/                        Vue 3 演示前端，与 src 同级
   index.ts                   demo 启动命令
   server.ts                  页面静态服务和后端组合启动
-  index.html                 页面结构
-  styles.css                 页面样式与响应式布局
-  app.js                     页面交互
-  client.js                  WebSocket 请求、超时与事件处理
+  index.html                 Vue 挂载入口
+  vite.config.ts             Vite 构建配置
+  src/
+    main.js                  Vue 应用入口
+    App.vue                  单页工作台
+    components/              连接、目录、编辑器、规则与日志面板
+    composables/             响应式状态、文件操作与事件处理
+    services/folder-client.js WebSocket 请求、超时与事件处理
+    assets/styles.css        页面样式与响应式布局
+  dist/                      前端构建产物，不纳入版本控制
 tests/
   unit/                      配置、文件系统测试
   integration/               WebSocket、demo 集成测试
