@@ -8,6 +8,7 @@ import TextEditor from "./components/TextEditor.vue";
 import IgnoreRules from "./components/IgnoreRules.vue";
 import EventLog from "./components/EventLog.vue";
 import WorkspaceDialog from "./components/WorkspaceDialog.vue";
+import ResizableWorkbench from "./components/ResizableWorkbench.vue";
 
 const workspace = useFolderWorkspace();
 const { state, status, authorized } = workspace;
@@ -39,10 +40,10 @@ const rulesDialog = ref(null);
     <div id="notice" class="notice" :class="{ error: state.noticeError }" role="status" aria-live="polite">{{ state.notice }}</div>
     <section class="card workspace" aria-labelledby="workspace-title">
       <h2 id="workspace-title" class="sr-only">文件工作区</h2>
-      <div class="workbench">
-        <DirectoryExplorer :workspace="workspace" />
-        <TextEditor :workspace="workspace" />
-      </div>
+      <ResizableWorkbench>
+        <template #directory><DirectoryExplorer :workspace="workspace" /></template>
+        <template #editor><TextEditor :workspace="workspace" /></template>
+      </ResizableWorkbench>
     </section>
   </main>
   <WorkspaceDialog ref="connectionDialog" labelled-by="connection-title">
