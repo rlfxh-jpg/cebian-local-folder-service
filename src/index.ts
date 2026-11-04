@@ -1,5 +1,5 @@
-import { readConfig } from "./config.ts";
-import { startService } from "./server.ts";
+import { readConfig } from "./config/index.ts";
+import { startService } from "./server/service.ts";
 
 try { process.loadEnvFile(); } catch { /* .env is optional when the process manager supplies configuration. */ }
 const config = readConfig();

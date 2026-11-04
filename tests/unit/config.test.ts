@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readConfig } from "./config.ts";
+import { readConfig } from "../../src/config/index.ts";
 
 test("仅接受精确扩展来源和本机回环监听地址", () => {
   const config = readConfig({

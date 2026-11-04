@@ -3,9 +3,9 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { FileSystemService } from "./filesystem.ts";
-import { ServiceError } from "./errors.ts";
-import type { IgnoreRules } from "./state.ts";
+import { FileSystemService } from "../../src/filesystem/service.ts";
+import { ServiceError } from "../../src/shared/errors.ts";
+import type { IgnoreRules } from "../../src/storage/state-store.ts";
 
 async function withRoot(run: (root: string, fs: FileSystemService, setRules: (next: IgnoreRules) => void) => Promise<void>): Promise<void> {
   const root = await mkdtemp(path.join(os.tmpdir(), "cebian-local-folder-"));

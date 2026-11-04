@@ -1,9 +1,9 @@
 import { watch, type FSWatcher } from "node:fs";
 import path from "node:path";
 import picomatch from "picomatch";
-import type { FileSystemService } from "./filesystem.ts";
-import type { IgnoreRules } from "./state.ts";
-import { ServiceError } from "./errors.ts";
+import type { FileSystemService } from "../filesystem/service.ts";
+import type { IgnoreRules } from "../storage/state-store.ts";
+import { ServiceError } from "../shared/errors.ts";
 
 export interface FileEvent { event: string; path?: string; oldPath?: string; sequence: number; version?: string | number; reason?: string }
 export interface WatchSubscription {

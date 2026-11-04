@@ -1,5 +1,5 @@
-import { readConfig } from "./config.ts";
-import { StateStore } from "./state.ts";
+import { readConfig } from "../config/index.ts";
+import { StateStore } from "../storage/state-store.ts";
 
 try { process.loadEnvFile(); } catch { /* .env is optional when the process manager supplies configuration. */ }
 const command = process.argv[2] ?? "help";

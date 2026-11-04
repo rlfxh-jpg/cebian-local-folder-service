@@ -5,8 +5,9 @@ import path from "node:path";
 import { once } from "node:events";
 import test from "node:test";
 import WebSocket from "ws";
-import { startService } from "./server.ts";
-import type { ServiceConfig } from "./config.ts";
+import { request, waitEvent } from "../helpers/protocol.ts";
+import { startService } from "../../src/server/service.ts";
+import type { ServiceConfig } from "../../src/config/index.ts";
 
 test("WebSocket 配对、目录授权、文件读取和撤销授权闭环", async () => {
   const sandbox = await mkdtemp(path.join(os.tmpdir(), "cebian-service-test-"));
@@ -56,30 +57,3 @@ test("WebSocket 配对、目录授权、文件读取和撤销授权闭环", asyn
   }
 });
 
-function request(socket: WebSocket, method: string, params: Record<string, unknown>): Promise<{ result?: Record<string, any>; error?: { code: string } }> {
-  const requestId = `${Date.now()}-${Math.random()}`;
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => { cleanup(); reject(new Error(`请求超时：${method}`)); }, 3000);
-    const onMessage = (raw: WebSocket.RawData) => {
-      const response = JSON.parse(raw.toString()) as { type: string; requestId: string; result?: Record<string, any>; error?: { code: string } };
-      if (response.type === "response" && response.requestId === requestId) { cleanup(); resolve(response); }
-    };
-    const onError = (error: Error) => { cleanup(); reject(error); };
-    function cleanup(): void { clearTimeout(timeout); socket.off("message", onMessage); socket.off("error", onError); }
-    socket.on("message", onMessage);
-    socket.on("error", onError);
-    socket.send(JSON.stringify({ protocolVersion: "1.0", type: "request", requestId, method, params }));
-  });
-}
-
-function waitEvent(socket: WebSocket, eventName: string): Promise<{ path?: string }> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => { cleanup(); reject(new Error(`事件超时：${eventName}`)); }, 3000);
-    const onMessage = (raw: WebSocket.RawData) => {
-      const message = JSON.parse(raw.toString()) as { type: string; event?: string; path?: string };
-      if (message.type === "event" && message.event === eventName) { cleanup(); resolve(message); }
-    };
-    function cleanup(): void { clearTimeout(timeout); socket.off("message", onMessage); }
-    socket.on("message", onMessage);
-  });
-}

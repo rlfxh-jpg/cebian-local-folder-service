@@ -23,6 +23,21 @@ Firefox 可将实际来源配置为 `moz-extension://<扩展UUID>`。支持多�
 
 服务可通过 `folder/choose` 弹出 Windows 文件夹选择器；用户也可在页面输入绝对路径并通过 `subscription/open` 授权。扩展不得在后台静默选择或切换目录。
 
+## Demo 页面
+
+```powershell
+npm install
+npm run demo
+```
+
+打开 **http://127.0.0.1:4173**，点击“连接服务”，输入终端显示的配对码，再输入本机绝对目录路径或使用系统选择器。该命令同时启动后端和 `demo/` 中的页面；无需先执行 `npm run dev`，也不需要配置扩展来源。按 `Ctrl+C` 同时关闭两者。
+
+页面可浏览目录、分页、按名称搜索、读取和编辑 UTF-8 文件、新建文件/目录、重命名、确认删除、管理最近目录与忽略规则，并查看实时事件。保存携带读取版本；发生冲突时保留编辑内容，由用户决定是否重新读取。CRLF 和 BOM 会保留，混合换行或独立 CR 文件只读展示。
+
+demo 仅绑定本机地址，并在本次进程中精确允许实际页面来源，仍需配对和目录授权。普通 `npm run dev` / `npm start` 不允许 demo 来源。凭据只保存在页面内存中，刷新页面后需重启服务取得新配对码；同一页面断线后可重新认证，但需重新打开目录。
+
+后端端口沿用 `LOCAL_FOLDER_PORT`（默认 `8765`）；页面端口可通过 `DEMO_PORT` 修改（默认 `4173`），均支持 `0` 自动分配，实际地址会输出到终端。页面自动读取后端地址。不要直接以 `file://` 打开 `demo/index.html`。更多说明见 [demo/README.md](demo/README.md)。
+
 ## 命令
 
 ```powershell
@@ -47,12 +62,38 @@ WebSocket 消息、方法参数、事件和错误码见 [协议说明](docs/prot
 
 ```text
 src/
-  index.ts             服务启动与信号关闭
-  server.ts            HTTP 健康检查和 WebSocket 协议路由
-  filesystem.ts        路径边界、文本文件操作、版本与忽略规则
-  watchers.ts          共享目录监听和漏报校验
-  state.ts             配对凭据、最近目录和规则的本机存储
-  admin.ts             本机授权查询与撤销
-  *.test.ts            文件系统和协议集成测试
-docs/protocol.md       WebSocket 协议说明
+  index.ts                   后端启动与信号关闭
+  cli/admin.ts               本机授权查询与撤销命令
+  config/index.ts            环境变量与配置校验
+  server/service.ts          HTTP、WebSocket 连接与生命周期
+  protocol/
+    types.ts                 协议与连接上下文类型
+    router.ts                方法路由、配对与目录订阅
+    responses.ts             响应和事件封装
+    validation.ts            入站参数与请求限流校验
+  filesystem/
+    service.ts               文本读写、目录查询、搜索和文件操作
+    paths.ts                 根目录解析、路径边界与名称校验
+    rules.ts                 忽略规则校验与匹配
+    types.ts                 文件系统领域类型
+  storage/state-store.ts     配对凭据、最近目录和规则的本机存储
+  watchers/registry.ts       共享目录监听与漏报校验
+  platform/folder-picker.ts  Windows 系统目录选择器
+  shared/errors.ts           统一服务错误与系统错误映射
+demo/                        独立演示页面，与 src 同级
+  index.ts                   demo 启动命令
+  server.ts                  页面静态服务和后端组合启动
+  index.html                 页面结构
+  styles.css                 页面样式与响应式布局
+  app.js                     页面交互
+  client.js                  WebSocket 请求、超时与事件处理
+tests/
+  unit/                      配置、文件系统测试
+  integration/               WebSocket、demo 集成测试
+  helpers/                   协议测试工具
+docs/
+  Local-Folder-Backend-Requirements.md  需求来源
+  protocol.md                WebSocket 协议说明
 ```
+
+后端入口负责组装模块；协议层调用文件系统、持久化和监听服务；平台层封装操作系统交互。`src` 不依赖 `demo` 或 `tests`。新增功能优先放入对应职责目录，协议变更同步更新文档与集成测试。

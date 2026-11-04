@@ -3,35 +3,11 @@ import { constants } from "node:fs";
 import { access, lstat, mkdir, open, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import picomatch from "picomatch";
-import { ServiceError } from "./errors.ts";
-import type { IgnoreRules } from "./state.ts";
-
-export interface FolderInfo { root: string; label: string; canonicalPath: string }
-export interface FileVersion { token: string; size: number; mtimeMs: number; identity: string }
-export interface EntryInfo {
-  name: string;
-  path: string;
-  kind: "file" | "directory" | "symlink" | "other";
-  size: number;
-  modifiedAt: number;
-  readable: boolean;
-  writable: boolean;
-  hiddenByRule: boolean;
-}
-
-const MAX_RULES = 100;
-const MAX_RULE_LENGTH = 256;
-
-export function canonicalRootKey(root: string): string { return process.platform === "win32" ? root.toLocaleLowerCase("en-US") : root; }
-
-export async function selectRoot(inputPath: string): Promise<FolderInfo> {
-  if (typeof inputPath !== "string" || !path.isAbsolute(inputPath) || inputPath.includes("\0")) throw new ServiceError("INVALID_PATH", "请选择一个有效的绝对目录路径。");
-  const canonical = await realpath(path.resolve(inputPath));
-  const info = await lstat(canonical);
-  if (!info.isDirectory() || info.isSymbolicLink()) throw new ServiceError("NOT_DIRECTORY", "所选路径不是可访问的真实目录。");
-  await access(canonical, constants.R_OK);
-  return { root: canonical, canonicalPath: canonical, label: path.basename(canonical) || canonical };
-}
+import { ServiceError } from "../shared/errors.ts";
+import { inside, parseRelativePath, validateName } from "./paths.ts";
+import { ruleMatches, validatePatterns } from "./rules.ts";
+import type { EntryInfo, FileVersion } from "./types.ts";
+import type { IgnoreRules } from "../storage/state-store.ts";
 
 export class FileSystemService {
   constructor(
@@ -305,33 +281,6 @@ export class FileSystemService {
   }
 }
 
-function parseRelativePath(value: string): string[] {
-  if (typeof value !== "string" || value.includes("\0") || value.includes("\\") || value.startsWith("/") || /^[a-zA-Z]:/.test(value) || value.startsWith("//")) {
-    throw new ServiceError("INVALID_PATH", "路径必须是授权目录下使用正斜杠的相对路径。");
-  }
-  if (value === "") return [];
-  const parts = value.split("/");
-  if (parts.some((part) => !part || part === "." || part === ".." || part.includes(":"))) throw new ServiceError("INVALID_PATH", "相对路径包含非法路径段。");
-  return parts;
-}
-
-function validateName(name: string): void {
-  if (typeof name !== "string" || !name || name === "." || name === ".." || name.length > 255 || /[\\/:*?"<>|\0-\x1f]/.test(name) || /[. ]$/.test(name)) {
-    throw new ServiceError("INVALID_NAME", "名称为空、过长或包含当前平台不允许的字符。");
-  }
-  if (process.platform === "win32" && /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$/i.test(name)) throw new ServiceError("INVALID_NAME", "该名称是 Windows 保留名称。");
-}
-
-function validatePatterns(value: unknown): string[] {
-  if (!Array.isArray(value) || value.length > MAX_RULES || value.some((item) => typeof item !== "string" || !item || item.length > MAX_RULE_LENGTH || item.startsWith("/") || item.includes("\\") || item.split("/").includes(".."))) {
-    throw new ServiceError("INVALID_IGNORE_RULE", "忽略规则格式无效或超过数量限制。");
-  }
-  for (const item of value) {
-    try { picomatch.makeRe(item as string); } catch { throw new ServiceError("INVALID_IGNORE_RULE", `无效的忽略规则：${String(item).slice(0, 80)}`); }
-  }
-  return [...new Set(value as string[])];
-}
-
 function makeVersion(info: { dev: bigint; ino: bigint; size: bigint; mtimeNs?: bigint; mtimeMs: bigint | number }, bytes: Buffer): FileVersion {
   const identity = `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs?.toString() ?? info.mtimeMs}`;
   const token = hash(`${identity}:${createHash("sha256").update(bytes).digest("hex")}`);
@@ -340,15 +289,8 @@ function makeVersion(info: { dev: bigint; ino: bigint; size: bigint; mtimeNs?: b
 function sameIdentity(a: { dev: bigint; ino: bigint; size: bigint; mtimeNs?: bigint }, b: { dev: bigint; ino: bigint; size: bigint; mtimeNs?: bigint }): boolean {
   return a.dev === b.dev && a.ino === b.ino && a.size === b.size && a.mtimeNs === b.mtimeNs;
 }
-function inside(root: string, target: string): boolean { const relative = path.relative(root, target); return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative)); }
 function hash(value: string): string { return createHash("sha256").update(value).digest("hex"); }
 function kindOrder(kind: EntryInfo["kind"]): number { return kind === "directory" ? 0 : kind === "file" ? 1 : kind === "symlink" ? 2 : 3; }
-function ruleMatches(match: (value: string) => boolean, value: string): boolean {
-  if (match(value)) return true;
-  const segments = value.split("/");
-  for (let index = 1; index < segments.length; index++) if (match(segments.slice(0, index).join("/"))) return true;
-  return false;
-}
 function hasUnpairedSurrogate(value: string): boolean {
   for (let index = 0; index < value.length; index++) {
     const code = value.charCodeAt(index);
