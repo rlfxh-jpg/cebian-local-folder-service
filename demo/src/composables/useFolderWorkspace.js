@@ -9,7 +9,7 @@ export function useFolderWorkspace(client = new FolderClient()) {
     nextOffset: undefined, truncated: false, searching: false, query: "", showHidden: false,
     selected: null, loaded: null, draft: "", original: "", stale: false,
     hiddenRules: "", stoppedRules: "", ruleVersion: null,
-    notice: "准备就绪。连接本机服务后开始使用。", noticeError: false, logs: [],
+    notice: "准备就绪。点击顶部“连接与配对”，连接本机服务后开始使用。", noticeError: false, logs: [],
   });
   // Credentials stay outside the reactive UI and never enter browser storage or logs.
   let token = "";
