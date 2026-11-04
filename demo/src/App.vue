@@ -20,11 +20,16 @@ const rulesDialog = ref(null);
   <header class="page-header">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true">C</span>
-      <div><h1>本地文件工作台 <span class="tag">VUE DEMO</span></h1><p>Cebian Local Folder Service · 协议 1.0</p></div>
+      <div>
+        <div class="brand-title">
+          <h1>本地文件工作台</h1>
+          <span id="connection-state" class="status" :class="{ ready: authorized }" role="status">{{ status }}</span>
+        </div>
+        <p>Cebian Local Folder Service · 协议 1.0</p>
+      </div>
     </div>
     <FolderPanel :workspace="workspace" />
     <div class="header-actions">
-      <span id="connection-state" class="status" :class="{ ready: authorized }">{{ status }}</span>
       <button type="button" aria-haspopup="dialog" @click="connectionDialog.open()">连接与配对</button>
       <button type="button" aria-haspopup="dialog" @click="eventsDialog.open()">请求与实时事件</button>
       <button type="button" aria-haspopup="dialog" @click="rulesDialog.open()">隐藏与停止监听规则</button>
