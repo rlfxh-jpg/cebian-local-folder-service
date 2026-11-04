@@ -11,6 +11,7 @@ const { state, subscribed, canSave, dirty, fileMeta } = w;
         <button :disabled="!subscribed || !state.loaded || state.busy" @click="w.run(w.reloadFile)">重新读取</button>
         <button :disabled="!subscribed || !state.selected || state.busy" @click="w.run(w.renameEntry)">重命名</button>
         <button class="danger" :disabled="!subscribed || !state.selected || state.busy" @click="w.run(w.deleteEntry)">删除</button>
+        <button id="refresh" :disabled="!subscribed || state.busy" @click="w.run(w.refreshTree)">刷新</button>
         <button id="save" class="primary" :disabled="!canSave" @click="w.run(w.saveFile)">保存</button>
       </div>
     </div>

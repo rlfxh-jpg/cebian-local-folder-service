@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -212,6 +212,22 @@ test("目录树按需展开、分支分页、搜索返回及变更同步，Vue �
     assert.equal(state.directory, "alpha/nested");
     assert.equal(state.expanded["alpha/nested"], true);
     assert.match(await renderExplorer(), /deep\.txt/);
+
+    // Context-menu creation targets the clicked directory, independent of the open file.
+    state.draft = "unsaved deep draft";
+    const selectedPath = state.selected.path;
+    globalThis.prompt = () => "context.txt";
+    await workspace.createEntry("file", "beta");
+    assert.equal(await readFile(path.join(root, "beta", "context.txt"), "utf8"), "");
+    assert.equal(state.directory, "alpha/nested");
+    assert.equal(state.selected.path, selectedPath);
+    assert.equal(state.draft, "unsaved deep draft");
+    globalThis.prompt = () => "context-folder";
+    await workspace.createEntry("directory", "");
+    assert.ok((await stat(path.join(root, "context-folder"))).isDirectory());
+    assert.ok(workspace.entriesFor("beta").some((entry) => entry.name === "context.txt"));
+    await workspace.refreshTree();
+    assert.equal(state.draft, "unsaved deep draft", "目录刷新不能丢弃编辑草稿");
 
     // A directory found through search opens its ancestor chain in the tree.
     await workspace.selectEntry(alpha);

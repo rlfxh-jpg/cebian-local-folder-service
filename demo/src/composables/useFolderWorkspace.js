@@ -228,13 +228,13 @@ export function useFolderWorkspace(client = new FolderClient()) {
     state.searching = true; state.entries = result.results; state.nextOffset = undefined; state.truncated = result.truncated;
     notice(result.truncated ? "搜索触及后端上限，结果不完整。可缩小关键词后重试。" : `搜索完成，找到 ${result.results.length} 个项目。`);
   }
-  async function createEntry(kind) {
-    const name = prompt(kind === "file" ? "新建空 UTF-8 文件，输入单个文件名：" : "新建目录，输入单个目录名：");
+  async function createEntry(kind, directory = state.directory) {
+    const name = prompt(`${kind === "file" ? "新建空 UTF-8 文件" : "新建目录"}（目标目录：/${directory}），输入单个名称：`);
     if (name === null) return;
     if (!name || /[/\\]/.test(name)) throw new Error("请输入单个名称，不能包含路径分隔符。");
-    const path = [state.directory, name].filter(Boolean).join("/");
+    const path = [directory, name].filter(Boolean).join("/");
     await client.request("file/create", { path, kind });
-    await revealDirectory(state.directory); await refreshTree(); notice(`已创建 ${path}。`);
+    await revealDirectory(directory); await refreshTree(); notice(`已创建 ${path}。`);
   }
   const contains = (parent, child) => child === parent || child.startsWith(`${parent}/`);
   async function renameEntry() {
