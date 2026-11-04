@@ -14,6 +14,7 @@ const { state, authorized } = w;
       <button id="pair" :disabled="!state.connected || state.authenticated || state.busy" @click="w.run(w.pair)">配对</button>
       <button id="service-status" :disabled="!authorized || state.busy" @click="w.run(w.serviceStatus)">服务状态</button>
     </div>
-    <p class="hint">凭据仅保存在当前页面内存；断线后可重新认证。刷新页面后需重启服务获取新配对码。</p>
+    <p v-if="state.connectionMode === 'shared-worker'" class="hint">刷新时尝试接回原连接和目录订阅，离开页面后连接最多保留 30 秒。多个标签页的连接与目录授权独立；配对凭据仅保存在同源 SharedWorker 内存中。最后一个标签页刷新时，浏览器可能回收 Worker，此时需重新配对。</p>
+    <p v-else class="hint">当前浏览器不支持 SharedWorker，使用页面连接；刷新会断开连接并清除内存中的配对凭据。</p>
   </section>
 </template>

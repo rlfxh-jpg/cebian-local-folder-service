@@ -37,7 +37,7 @@ export async function startDemo(config: ServiceConfig = readConfig(), port = 417
       response.setHeader("Cache-Control", "no-store");
       response.setHeader("X-Content-Type-Options", "nosniff");
       response.setHeader("Referrer-Policy", "no-referrer");
-      response.setHeader("Content-Security-Policy", `default-src 'self'; script-src 'self'; style-src 'self'${development ? " 'unsafe-inline'" : ""}; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:* ws://localhost:* ws://[::1]:*; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`);
+      response.setHeader("Content-Security-Policy", `default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self'${development ? " 'unsafe-inline'" : ""}; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:* ws://localhost:* ws://[::1]:*; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`);
       if (request.method !== "GET" && request.method !== "HEAD") {
         response.writeHead(405, { Allow: "GET, HEAD" }); response.end(); return;
       }

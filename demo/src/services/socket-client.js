@@ -1,5 +1,5 @@
-/** Small protocol client shared by every demo action. Credentials never enter logs. */
-export class FolderClient {
+/** WebSocket protocol transport. Browser instances live inside the SharedWorker. */
+export class SocketClient {
   socket;
   pending = new Map();
   onEvent = () => {};
@@ -25,6 +25,7 @@ export class FolderClient {
       else pending.resolve(message.result);
     });
     socket.addEventListener("close", () => {
+      if (this.socket !== socket) return;
       for (const pending of this.pending.values()) {
         clearTimeout(pending.timer);
         pending.reject(new Error("连接已断开，请重新连接并授权目录。"));
@@ -35,7 +36,7 @@ export class FolderClient {
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => { socket.close(); reject(new Error("连接超时，请确认后端已启动。")); }, 10_000);
       socket.addEventListener("open", () => { clearTimeout(timer); resolve(); }, { once: true });
-      socket.addEventListener("error", () => { clearTimeout(timer); reject(new Error("连接失败，请检查服务地址与来源授权。")); }, { once: true });
+      socket.addEventListener("error", () => { clearTimeout(timer); socket.close(); reject(new Error("连接失败，请检查服务地址与来源授权。")); }, { once: true });
       socket.addEventListener("close", () => { clearTimeout(timer); reject(new Error("服务已关闭连接。")); }, { once: true });
     });
   }

@@ -5,6 +5,7 @@ export function useFolderWorkspace(client = new FolderClient()) {
   const state = reactive({
     endpoint: "ws://127.0.0.1:8765/ws", pairCode: "", connected: false,
     authenticated: false, subscription: null, busy: false,
+    connectionMode: client.connectionMode,
     directory: "", entries: [], recents: [], directories: Object.create(null), expanded: Object.create(null),
     nextOffset: undefined, truncated: false, searching: false, query: "", showHidden: false,
     selected: null, loaded: null, draft: "", original: "", stale: false,
@@ -12,7 +13,7 @@ export function useFolderWorkspace(client = new FolderClient()) {
     hiddenRules: "", stoppedRules: "", ruleVersion: null,
     notice: "准备就绪。点击顶部“连接与配对”，连接本机服务后开始使用。", noticeError: false, logs: [],
   });
-  // Credentials stay outside the reactive UI and never enter browser storage or logs.
+  // Only the page-transport fallback keeps a credential here. SharedWorker owns its credentials.
   let token = "";
   let refreshTimer;
   let saveTimer;
@@ -316,8 +317,17 @@ export function useFolderWorkspace(client = new FolderClient()) {
   async function connect() {
     const url = new URL(state.endpoint);
     if (!["ws:", "wss:"].includes(url.protocol) || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || url.username || url.password || url.search || url.hash) throw new Error("请输入本机 WebSocket 地址，不要在地址中携带凭据。");
-    await client.connect(url.href); state.connected = true;
-    await client.request("hello");
+    const session = await client.connect(url.href); state.connected = true;
+    const hello = await client.request("hello");
+    if (hello.authenticated) {
+      state.authenticated = true;
+      if (session?.subscription) {
+        const rules = await client.request("ignore/get");
+        await acceptSubscription({ ...session.subscription, rules });
+        notice("已接回 SharedWorker 中的连接和目录订阅，目录内容已刷新。");
+      } else { await showRecents(); notice("已自动认证，请通过系统选择器授权目录。"); }
+      return;
+    }
     if (token) {
       try { await client.request("authenticate", { token }); state.authenticated = true; await showRecents(); notice("已重新认证，请重新授权目录。"); }
       catch (error) { if (error.code === "UNAUTHORIZED") token = ""; throw error; }
@@ -327,7 +337,7 @@ export function useFolderWorkspace(client = new FolderClient()) {
     const code = state.pairCode.trim();
     if (!code) throw new Error("请输入启动终端中的配对码。");
     const result = await client.request("pair/complete", { code, clientName: "Cebian Vue Demo" });
-    token = result.token; state.authenticated = true; state.pairCode = "";
+    token = result.token || ""; state.authenticated = true; state.pairCode = "";
     await showRecents(); notice("配对成功。请通过系统选择器选择并授权文件夹。");
   }
   async function serviceStatus() {
@@ -435,11 +445,16 @@ export function useFolderWorkspace(client = new FolderClient()) {
       if (!response.ok) throw new Error("无法读取 demo 配置，请确认通过 npm run demo 启动页面。");
       state.endpoint = (await response.json()).websocketUrl;
     } catch (error) { report(error); }
+    await run(async () => {
+      const session = await client.restore?.();
+      if (session?.connected && !disposed) { state.endpoint = session.endpoint; await connect(); }
+      else if (session?.recoveryMissed && !disposed) notice("原连接已释放或 SharedWorker 已被浏览器回收，请重新连接；若配对凭据已丢失，需重启服务获取新配对码。");
+    });
   });
   onUnmounted(() => {
     disposed = true; clearTimeout(refreshTimer); clearTimeout(saveTimer);
     document.removeEventListener("keydown", onKeydown); window.removeEventListener("beforeunload", beforeUnload);
-    client.onEvent = client.onClose = client.onRequest = () => {}; client.disconnect(); token = "";
+    client.onEvent = client.onClose = client.onRequest = () => {}; client.release(); token = "";
   });
 
   return {

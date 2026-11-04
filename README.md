@@ -42,7 +42,7 @@ npm run demo
 
 文本编辑器使用 [CodeMirror 6](https://codemirror.net/)（MIT 协议），支持行号、按文件类型加载语法高亮、撤销重做、括号匹配、折叠和 Ctrl/Cmd+F 搜索替换，复用上述双向同步与版本冲突保护。
 
-demo 仅绑定本机地址，并在本次进程中精确允许实际页面来源，仍需配对和目录授权。普通 `npm run dev` / `npm start` 不允许 demo 来源。凭据只保存在页面内存中，刷新页面后需重启服务取得新配对码；同一页面断线后可重新认证，但需重新打开目录。
+demo 仅绑定本机地址，并在本次进程中精确允许实际页面来源，仍需配对和目录授权。普通 `npm run dev` / `npm start` 不允许 demo 来源。WebSocket 由 SharedWorker 管理，各标签页的连接及目录订阅独立，配对凭据仅在同源 Worker 内存中复用。页面刷新时为连接保留 30 秒，尝试接回原连接与目录订阅；浏览器回收 Worker 时无法保证保活。不支持 SharedWorker 时退回页面连接。服务重启或实际断线后需重新授权目录，Worker 凭据丢失时需重新配对。
 
 后端端口沿用 `LOCAL_FOLDER_PORT`（默认 `8765`）；页面端口可通过 `DEMO_PORT` 修改（默认 `4173`），均支持 `0` 自动分配，实际地址会输出到终端。页面自动读取后端地址。不要直接以 `file://` 打开 `demo/index.html`。更多说明见 [demo/README.md](demo/README.md)。
 
@@ -99,7 +99,7 @@ demo/                        Vue 3 演示前端，与 src 同级
     App.vue                  单页工作台
     components/              连接、目录、编辑器、规则与日志面板
     composables/             响应式状态、文件操作与事件处理
-    services/folder-client.js WebSocket 请求、超时与事件处理
+    services/                页面 RPC、SharedWorker 会话管理和 WebSocket 协议客户端
     assets/styles.css        页面样式与响应式布局
   dist/                      前端构建产物，不纳入版本控制
 tests/

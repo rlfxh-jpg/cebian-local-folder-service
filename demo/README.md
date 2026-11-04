@@ -28,7 +28,11 @@ npm run demo
 
 目录树与编辑区之间的分隔线支持左右拖动调整宽度，目录树最窄 180px，编辑区至少保留 280px。双击分隔线恢复默认宽度；Tab 聚焦分隔线后可用左右方向键微调，Shift 加速，Home/End 调整到最窄/最宽。窄屏继续使用上下布局。
 
-配对凭据仅在当前页面内存中存活，不写入浏览器存储、URL 或事件记录。刷新页面会丢失凭据，需要重启服务取得新配对码。断线重连可复用同一页面的凭据，目录需重新授权。未保存内容在普通断线时保留；授权撤销时清空。
+WebSocket 由同源 SharedWorker 管理，每个标签页使用独立连接与目录订阅，切换目录、断开或关闭一个标签页不会替换其他标签页的授权目录。复制标签页时即使复制了 sessionStorage，也会分配新的独立会话。同一 Worker 中的配对凭据按后端地址复用，新标签页连接时可自动认证，但仍须通过系统选择器独立授权目录。不同来源（例如 localhost 与 127.0.0.1）使用不同 Worker。
+
+刷新或离开页面时只释放 MessagePort，Worker 为原连接保留 30 秒；在此期间重新打开同一标签页，会尝试接回原 WebSocket 和目录订阅并重新查询目录与规则。浏览器 sessionStorage 仅记录随机会话 ID，不保存凭据、路径或文件内容。显式点击“断开”立即关闭该标签页的连接；服务断线或重启后必须重新授权目录。未完成的请求不自动重放，页面尚未写入本地的草稿不会因连接保留而自动恢复。
+
+配对凭据仅保存在 Worker 内存，不写入浏览器存储、URL 或事件记录；撤销授权时清除凭据并结束对应连接。SharedWorker 被浏览器回收、所有页面关闭或浏览器退出时，内存可能丢失，30 秒保留不构成浏览器层面的保活保证；实现向支持的浏览器请求 extendedLifetime。此时需重新配对。浏览器不支持 SharedWorker 时退回页面连接，刷新会断开并丢失配对凭据。未保存内容在普通断线时保留；授权撤销时清空。
 
 编辑区域使用 MIT 开源的 [CodeMirror 6](https://codemirror.net/)，提供行号、按文件名按需加载的语法高亮、撤销/重做、括号匹配、代码折叠和搜索替换（Ctrl/Cmd+F），Tab 缩进。切换文件时重置撤销历史；本地同步更新不触发重复保存，并尽量保留光标与滚动位置。编辑器保持紧凑字体并随工作区高度调整。
 
@@ -54,7 +58,10 @@ demo/
     components/              各功能面板
     editor/code-editor.js    CodeMirror 实例、语言加载与编辑事务适配
     composables/useFolderWorkspace.js  状态与业务交互
-    services/folder-client.js          WebSocket 协议客户端
+    services/folder-client.js          页面 RPC、连接恢复与页面连接回退
+    services/folder-connection.worker.js  SharedWorker 入口
+    services/shared-connection-host.js  标签页会话、连接及内存凭据管理
+    services/socket-client.js          WebSocket 请求、超时与事件处理
     assets/styles.css        页面样式
   dist/                      Vite 构建产物（忽略提交）
 ```
